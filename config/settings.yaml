@@ -1,0 +1,121 @@
+# =============================================================================
+# Blitzy Platform API Test Suite — Feature-Specific Configuration
+# =============================================================================
+#
+# This file defines endpoint paths, field name conventions, validation
+# constraints, query parameter mappings, and default test parameters for the
+# percent_complete field validation test suite.
+#
+# Consumed by: src/config.py via Settings._load_yaml_config() using
+#              yaml.safe_load()
+#
+# IMPORTANT:
+#   - This file must NEVER contain secrets, API tokens, base URLs with real
+#     domains, project IDs, or any other sensitive/environment-specific values.
+#   - All environment-specific values are read from environment variables or
+#     .env files — see .env.example for reference.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# API Endpoint Path Definitions
+# -----------------------------------------------------------------------------
+# These are relative paths appended to the BASE_URL environment variable.
+# The base URL is configured externally via the BASE_URL environment
+# variable and is NOT included here.
+#
+# Key names must match the keys expected by src/config.py and src/api_client.py:
+#   - runs_metering       → GET /runs/metering?projectId={id}
+#   - runs_metering_current → GET /runs/metering/current
+#   - project             → GET /project?id={id}
+# -----------------------------------------------------------------------------
+endpoint_paths:
+  runs_metering: "/runs/metering"
+  runs_metering_current: "/runs/metering/current"
+  project: "/project"
+
+
+# -----------------------------------------------------------------------------
+# Query Parameter Names
+# -----------------------------------------------------------------------------
+# Defines the query parameter names used by each endpoint when making requests.
+#
+#   - GET /runs/metering uses "projectId" to identify the target project
+#   - GET /project uses "id" to identify the target project
+#   - GET /runs/metering/current has no required query parameters
+# -----------------------------------------------------------------------------
+query_parameters:
+  runs_metering:
+    project_id: "projectId"
+  project:
+    id: "id"
+  runs_metering_current: {}
+
+
+# -----------------------------------------------------------------------------
+# Field Name Variants
+# -----------------------------------------------------------------------------
+# The percent_complete field may appear in API responses under either
+# snake_case or camelCase naming conventions depending on the endpoint or
+# serialization layer.
+#
+# Both conventions are considered VALID:
+#   - "percent_complete"  (snake_case)
+#   - "percentComplete"   (camelCase)
+#
+# If the field is missing under BOTH names, that constitutes a bug and tests
+# must report a failure.
+#
+# CRITICAL: This must be a list under field_names.percent_complete — this is
+# the structure that src/config.py reads via:
+#   yaml_config["field_names"].get("percent_complete", [...])
+# -----------------------------------------------------------------------------
+field_names:
+  percent_complete:
+    - "percent_complete"
+    - "percentComplete"
+
+
+# -----------------------------------------------------------------------------
+# Validation Parameter Defaults
+# -----------------------------------------------------------------------------
+# Defines the validation constraints for the percent_complete field as
+# specified in the API contract and test requirements.
+#
+# Value Constraint Rules:
+#   - Numeric value between 0.0 and 100.0 inclusive → VALID
+#   - null / None                                   → VALID
+#   - Value greater than 100.0                      → INVALID
+#   - Value less than 0.0                           → INVALID
+#   - Non-numeric type (string, boolean, object)    → INVALID
+#   - Integer within range (e.g., 50)               → VALID (int and float accepted)
+# -----------------------------------------------------------------------------
+validation:
+  percent_complete:
+    min_value: 0.0
+    max_value: 100.0
+    acceptable_types:
+      - "int"
+      - "float"
+      - "null"
+    null_allowed: true
+
+
+# -----------------------------------------------------------------------------
+# Default Test Parameters
+# -----------------------------------------------------------------------------
+# Runtime defaults for test execution. These can be overridden by environment
+# variables or pytest command-line options where applicable.
+#
+#   request_timeout — Maximum seconds to wait for an API response before
+#                     considering the request failed (aligns with pytest-timeout
+#                     settings in pytest.ini)
+#   retry_count     — Number of retry attempts for transient network failures
+#                     before marking a test as failed
+#   retry_delay     — Seconds to wait between retry attempts (simple linear
+#                     back-off)
+# -----------------------------------------------------------------------------
+test_defaults:
+  request_timeout: 30
+  retry_count: 3
+  retry_delay: 1.0
