@@ -1,3 +1,10 @@
+# Blitzy Platform API Test Suite — Python Dependencies
+#
+# All required packages for the automated API response test coverage suite
+# that validates the percent_complete field across three Blitzy Platform
+# API endpoints: GET /runs/metering, GET /runs/metering/current, and
+# GET /project.
+
 # Core test framework
 pytest>=8.3.0
 
@@ -13,11 +20,11 @@ pydantic>=2.9.0
 # Environment variable loading from .env files
 python-dotenv>=1.0.0
 
+# YAML configuration file parsing
+pyyaml>=6.0.0
+
 # HTML test report generation
 pytest-html>=4.1.0
 
 # Test execution timeout enforcement
 pytest-timeout>=2.3.0
-
-# YAML configuration file parsing
-pyyaml>=6.0.0
