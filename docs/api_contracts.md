@@ -101,8 +101,10 @@ def validate_percent_complete(response_obj, field_names=("percent_complete", "pe
     if value is None:
         return  # null is a valid value
 
-    # Step 4: Type check — must be numeric (int or float)
-    assert isinstance(value, (int, float)), f"Expected numeric type, got {type(value).__name__}"
+    # Step 4: Type check — must be numeric (int or float), but NOT bool
+    # (Python's bool is a subclass of int, so explicit exclusion is required)
+    assert isinstance(value, (int, float)) and not isinstance(value, bool), \
+        f"Expected numeric type, got {type(value).__name__}"
 
     # Step 5: Range check — 0.0 <= value <= 100.0
     assert 0.0 <= value <= 100.0, f"Value {value} outside valid range [0.0, 100.0]"
@@ -403,7 +405,7 @@ The contracts defined in this document are enforced programmatically through Pyd
 |---|---|---|
 | `GET /runs/metering` | `MeteringResponse` | `percent_complete: Optional[float] = Field(None, ge=0.0, le=100.0)` |
 | `GET /runs/metering/current` | `CurrentMeteringResponse` | `percent_complete: Optional[float] = Field(None, ge=0.0, le=100.0)` |
-| `GET /project` | `ProjectResponse` → `MeteringData` | `percent_complete: Optional[float] = Field(None, ge=0.0, le=100.0)` |
+| `GET /project` | `ProjectResponse` → `ProjectMeteringBlock` | `percent_complete: Optional[float] = Field(None, ge=0.0, le=100.0)` |
 
 ### 8.2 Model Hierarchy for `GET /project`
 
@@ -415,7 +417,7 @@ ProjectResponse
 ├── name: str
 ├── description: Optional[str]
 ├── created_at: str
-└── metering: MeteringData
+└── metering: ProjectMeteringBlock
     ├── percent_complete: Optional[float]  (ge=0.0, le=100.0)
     ├── estimated_hours_saved: Optional[float]
     ├── estimated_lines_generated: Optional[int]
