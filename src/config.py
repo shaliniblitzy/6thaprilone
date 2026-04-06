@@ -81,6 +81,7 @@ class Settings(BaseModel):
     )
     api_token: str = Field(
         default="",
+        repr=False,
         description="Authentication bearer token for API access",
     )
 

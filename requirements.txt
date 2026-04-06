@@ -6,6 +6,13 @@
 # GET /project.
 
 # Core test framework
+# NOTE: CVE-2025-71176 (CVSS 6.8 MEDIUM) affects pytest through 9.0.2 on UNIX —
+# predictable /tmp/pytest-of-{user} paths allow local symlink attacks (DoS / privilege
+# escalation).  No patched release is available as of 2026-04.  Risk is LOW for this
+# dev-only tool.  Mitigation: set PYTEST_DEBUG_TEMPROOT to a secure, user-private
+# directory (e.g. export PYTEST_DEBUG_TEMPROOT="$HOME/.pytest_tmp") or run tests inside
+# isolated containers.  Monitor https://github.com/pytest-dev/pytest/issues/13669 for
+# an upstream fix.
 pytest>=8.3.0
 
 # HTTP client for API requests
