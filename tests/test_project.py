@@ -47,6 +47,7 @@ Fixtures Used (from conftest.py)
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, Dict, List
 
 import pytest
@@ -294,6 +295,11 @@ def test_percent_complete_type_in_project(
     response = api_client.get_project(test_project_id)
     metering_data = _get_metering_block(response)
 
+    assert isinstance(metering_data, dict), (
+        f"[{_ENDPOINT}] Expected metering block to be dict, "
+        f"got {type(metering_data).__name__}"
+    )
+
     value = get_percent_complete_value(
         metering_data,
         PERCENT_COMPLETE_FIELD_NAMES,
@@ -326,6 +332,11 @@ def test_percent_complete_range_in_project(
     """
     response = api_client.get_project(test_project_id)
     metering_data = _get_metering_block(response)
+
+    assert isinstance(metering_data, dict), (
+        f"[{_ENDPOINT}] Expected metering block to be dict, "
+        f"got {type(metering_data).__name__}"
+    )
 
     value = get_percent_complete_value(
         metering_data,
@@ -368,6 +379,11 @@ def test_percent_complete_null_acceptance_in_project(
     """
     response = api_client.get_project(test_project_id)
     metering_data = _get_metering_block(response)
+
+    assert isinstance(metering_data, dict), (
+        f"[{_ENDPOINT}] Expected metering block to be dict, "
+        f"got {type(metering_data).__name__}"
+    )
 
     value = get_percent_complete_value(
         metering_data,
@@ -480,8 +496,6 @@ def test_metering_block_additional_fields(
         found = any(variant in metering_keys for variant in variants)
         if not found:
             # Soft warning — do not fail, but document the observation.
-            import warnings
-
             warnings.warn(
                 f"[{_ENDPOINT}] metering block does not contain "
                 f"'{logical_name}' (checked variants: {variants}). "

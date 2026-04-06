@@ -34,8 +34,6 @@ Design Rules (AAP §0.7.1)
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from src.api_client import APIClient

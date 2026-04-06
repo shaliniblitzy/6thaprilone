@@ -32,11 +32,11 @@ The following table maps each requirement to its corresponding test coverage, in
 
 | Requirement ID | Requirement Name             | Description                                                                                                                 | Test File(s)                                                                                         | Test Function(s)                                                                                                                                                               | Priority |
 |----------------|------------------------------|-----------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| R-001          | Field Presence Validation    | Verify that the `percent_complete` or `percentComplete` field exists in the JSON response payload of all three target endpoints | `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py`                          | `test_percent_complete_field_present` (in each file)                                                                                                                           | Critical |
-| R-002          | Data Type Validation         | Confirm that the field value is numeric (`float` or `int`) or explicitly `null` — never a string, boolean, or other type     | `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py`                          | `test_percent_complete_type_valid` (in each file)                                                                                                                              | Critical |
-| R-003          | Value Range Validation       | Assert that when the field value is not `null`, it falls within the inclusive range `0.0` to `100.0`                         | `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py`                          | `test_percent_complete_value_range` (in each file)                                                                                                                             | Critical |
-| R-004          | Cross-API Consistency        | Ensure the field is consistently present across all three APIs for the same project/run context                               | `test_cross_api_consistency.py`                                                                      | `test_field_present_in_all_endpoints`, `test_field_consistency_across_endpoints`                                                                                                | High     |
-| R-005          | Edge Case Coverage           | Validate negative scenarios including values exceeding 100, values below 0, wrong data types, null handling, and field name mismatches | `test_edge_cases.py`                                                                                 | `test_boundary_exactly_zero`, `test_boundary_exactly_hundred`, `test_null_value_accepted`, `test_value_over_hundred_invalid`, `test_negative_value_invalid`, `test_wrong_type_invalid` | High     |
+| R-001          | Field Presence Validation    | Verify that the `percent_complete` or `percentComplete` field exists in the JSON response payload of all three target endpoints | `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py`                          | `test_percent_complete_present_in_runs_metering`, `test_percent_complete_present_in_current_metering`, `test_percent_complete_present_in_project_metering`                      | Critical |
+| R-002          | Data Type Validation         | Confirm that the field value is numeric (`float` or `int`) or explicitly `null` — never a string, boolean, or other type     | `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py`                          | `test_percent_complete_type_in_runs_metering`, `test_percent_complete_type_in_current_metering`, `test_percent_complete_type_in_project`                                        | Critical |
+| R-003          | Value Range Validation       | Assert that when the field value is not `null`, it falls within the inclusive range `0.0` to `100.0`                         | `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py`                          | `test_percent_complete_range_in_runs_metering`, `test_percent_complete_range_in_current_metering`, `test_percent_complete_range_in_project`                                     | Critical |
+| R-004          | Cross-API Consistency        | Ensure the field is consistently present across all three APIs for the same project/run context                               | `test_cross_api_consistency.py`                                                                      | `test_percent_complete_present_in_all_endpoints`, `test_percent_complete_value_logical_consistency`                                                                             | High     |
+| R-005          | Edge Case Coverage           | Validate negative scenarios including values exceeding 100, values below 0, wrong data types, null handling, and field name mismatches | `test_edge_cases.py`                                                                                 | `test_validate_percent_complete_exactly_zero`, `test_validate_percent_complete_exactly_hundred`, `test_validate_percent_complete_null_value`, `test_validate_percent_complete_exceeds_hundred`, `test_validate_percent_complete_below_zero`, `test_validate_percent_complete_wrong_type_string`, `test_validate_percent_complete_wrong_type_boolean` | High     |
 
 ---
 
@@ -72,12 +72,16 @@ The test suite is organized into five logical groups, each targeting a specific 
 
 - **Target Endpoint**: `GET /runs/metering?projectId={id}`
 - **Pytest Markers**: `@pytest.mark.runs_metering`
-- **Test Functions**:
-  - `test_percent_complete_field_present` — Asserts the field key exists in each run record
-  - `test_percent_complete_type_valid` — Asserts the field value type is `int`, `float`, or `None`
-  - `test_percent_complete_value_range` — Asserts non-null values satisfy `0.0 <= value <= 100.0`
-  - `test_response_status_code` — Asserts the endpoint returns HTTP 200 OK
-  - `test_field_naming_convention` — Asserts at least one of `percent_complete` or `percentComplete` is present
+- **Test Functions** (actual implementation names):
+  - `test_runs_metering_response_is_valid_json` — Asserts the endpoint returns valid JSON
+  - `test_runs_metering_returns_data` — Asserts the response contains metering data
+  - `test_percent_complete_present_in_runs_metering` — Asserts the field key exists in each run record
+  - `test_percent_complete_field_naming_in_metering` — Asserts at least one of `percent_complete` or `percentComplete` is present
+  - `test_percent_complete_type_in_runs_metering` — Asserts the field value type is `int`, `float`, or `None`
+  - `test_percent_complete_range_in_runs_metering` — Asserts non-null values satisfy `0.0 <= value <= 100.0`
+  - `test_percent_complete_null_acceptance_in_metering` — Asserts null values are accepted
+  - `test_all_records_have_percent_complete` — Asserts every record in a multi-record response has the field
+  - `test_completed_run_percent_complete` — Asserts completed runs have a valid percent_complete value
 - **Pass Criteria**: All assertions pass with a valid project ID that has code generation run history
 - **Fail Criteria**: Any assertion failure indicates a field contract violation
 
@@ -85,12 +89,15 @@ The test suite is organized into five logical groups, each targeting a specific 
 
 - **Target Endpoint**: `GET /runs/metering/current`
 - **Pytest Markers**: `@pytest.mark.runs_metering_current`, `@pytest.mark.requires_active_run` (on applicable tests)
-- **Test Functions**:
-  - `test_percent_complete_field_present` — Asserts the field exists for the current run
-  - `test_percent_complete_type_valid` — Asserts the field value type is numeric or null
-  - `test_percent_complete_value_range` — Asserts non-null values are within the valid range
-  - `test_active_run_less_than_hundred` — Asserts an in-progress run has a value strictly less than 100
-  - `test_no_active_run_returns_null` — Asserts null or appropriate response when no run is active
+- **Test Functions** (actual implementation names):
+  - `test_current_metering_response_is_valid` — Asserts the endpoint returns valid JSON
+  - `test_percent_complete_present_in_current_metering` — Asserts the field exists for the current run
+  - `test_percent_complete_field_naming_convention` — Asserts field naming follows accepted conventions
+  - `test_percent_complete_type_in_current_metering` — Asserts the field value type is numeric or null
+  - `test_percent_complete_range_in_current_metering` — Asserts non-null values are within the valid range
+  - `test_current_metering_in_progress_value` — Asserts an in-progress run has a value strictly less than 100
+  - `test_current_metering_no_active_run` — Asserts graceful handling when no active run exists
+  - `test_percent_complete_null_for_no_active_run` — Asserts null or appropriate response when no run is active
 - **Pass Criteria**: All assertions pass; tests marked `requires_active_run` are skipped if no active run exists
 - **Fail Criteria**: Field missing, wrong type, or out-of-range value
 
@@ -98,11 +105,16 @@ The test suite is organized into five logical groups, each targeting a specific 
 
 - **Target Endpoint**: `GET /project?id={id}`
 - **Pytest Markers**: `@pytest.mark.project`
-- **Test Functions**:
-  - `test_percent_complete_field_present` — Asserts the field exists within the nested metering data block
-  - `test_percent_complete_type_valid` — Asserts the nested field value type is numeric or null
-  - `test_percent_complete_value_range` — Asserts non-null values are within the valid range
-  - `test_metering_block_exists` — Asserts the metering data structure is present in the project response
+- **Test Functions** (actual implementation names):
+  - `test_project_response_is_valid_json` — Asserts the endpoint returns valid JSON
+  - `test_project_response_contains_metering_block` — Asserts the metering data structure is present
+  - `test_percent_complete_present_in_project_metering` — Asserts the field exists within the nested metering data block
+  - `test_percent_complete_not_at_top_level` — Asserts the field is nested, not at root level
+  - `test_percent_complete_type_in_project` — Asserts the nested field value type is numeric or null
+  - `test_percent_complete_range_in_project` — Asserts non-null values are within the valid range
+  - `test_percent_complete_null_acceptance_in_project` — Asserts null values are accepted
+  - `test_metering_block_structure` — Asserts the metering block is a dict
+  - `test_metering_block_additional_fields` — Validates companion fields in the metering block
 - **Pass Criteria**: All assertions pass with a valid project ID
 - **Fail Criteria**: Missing metering block, missing field, wrong type, or out-of-range value
 
@@ -110,10 +122,14 @@ The test suite is organized into five logical groups, each targeting a specific 
 
 - **Target Endpoints**: All three (`GET /runs/metering`, `GET /runs/metering/current`, `GET /project`)
 - **Pytest Markers**: `@pytest.mark.cross_api`
-- **Test Functions**:
-  - `test_field_present_in_all_endpoints` — Calls all three endpoints for the same project and asserts field presence in all responses
-  - `test_field_consistency_across_endpoints` — Compares `percent_complete` values across endpoints for logical consistency
-  - `test_field_naming_consistency` — Documents and verifies the naming convention used by each endpoint
+- **Test Functions** (actual implementation names):
+  - `test_percent_complete_present_in_all_endpoints` — Calls all three endpoints for the same project and asserts field presence in all responses
+  - `test_percent_complete_field_name_consistency` — Documents and verifies the naming convention used by each endpoint
+  - `test_percent_complete_type_consistency` — Verifies type consistency across endpoints
+  - `test_percent_complete_value_logical_consistency` — Compares `percent_complete` values across endpoints for logical consistency with eventual-consistency tolerance
+  - `test_percent_complete_null_consistency` — Verifies null-vs-non-null distribution consistency
+  - `test_all_endpoints_accessible` — Verifies HTTP accessibility and valid-JSON responses
+  - `test_endpoints_return_structured_data` — Validates response top-level structure per endpoint
 - **Pass Criteria**: Field present in all three; values are logically consistent for the same run context
 - **Fail Criteria**: Field missing in any endpoint, or values are contradictory across endpoints
 
@@ -121,16 +137,27 @@ The test suite is organized into five logical groups, each targeting a specific 
 
 - **Target**: Validation logic and simulated/mock data scenarios
 - **Pytest Markers**: `@pytest.mark.edge_cases`
-- **Test Functions**:
-  - `test_boundary_exactly_zero` — Validates that 0.0 is accepted
-  - `test_boundary_exactly_hundred` — Validates that 100.0 is accepted
-  - `test_null_value_accepted` — Validates that `null` is accepted as a valid value
-  - `test_value_over_hundred_invalid` — Validates that values greater than 100 are flagged as invalid
-  - `test_negative_value_invalid` — Validates that negative values are flagged as invalid
-  - `test_wrong_type_string_invalid` — Validates that a string like `"50%"` is flagged as invalid
-  - `test_wrong_type_boolean_invalid` — Validates that a boolean like `true` is flagged as invalid
-  - `test_field_completely_missing` — Validates that a response missing both field name variants is flagged as a defect
-  - `test_integer_value_accepted` — Validates that an integer value like `50` (not `50.0`) is accepted
+- **Test Functions** (actual implementation names):
+  - `test_validate_percent_complete_exactly_zero` — Validates that 0.0 is accepted
+  - `test_validate_percent_complete_exactly_hundred` — Validates that 100.0 is accepted
+  - `test_validate_percent_complete_null_value` — Validates that `null` is accepted as a valid value
+  - `test_validate_percent_complete_mid_range_float` — Validates mid-range float values
+  - `test_validate_percent_complete_integer_values` — Validates that integer values like `50` are accepted
+  - `test_validate_percent_complete_exceeds_hundred` — Validates that values greater than 100 are flagged as invalid
+  - `test_validate_percent_complete_below_zero` — Validates that negative values are flagged as invalid
+  - `test_validate_percent_complete_wrong_type_string` — Validates that a string like `"50%"` is flagged as invalid
+  - `test_validate_percent_complete_wrong_type_boolean` — Validates that a boolean like `true` is flagged as invalid
+  - `test_validate_percent_complete_wrong_type_list` — Validates that list type is rejected
+  - `test_validate_percent_complete_wrong_type_dict` — Validates that dict type is rejected
+  - `test_field_presence_snake_case` — Validates snake_case field name detection
+  - `test_field_presence_camel_case` — Validates camelCase field name detection
+  - `test_field_presence_both_conventions` — Validates detection when both conventions present
+  - `test_field_presence_neither_convention_raises_error` — Validates that missing both names is flagged as a defect
+  - `test_field_name_typo_not_accepted` — Validates that typo field names are rejected
+  - `test_validate_percent_complete_parameterized_valid` — Parameterized suite of valid values
+  - `test_validate_percent_complete_parameterized_invalid` — Parameterized suite of invalid values
+  - `test_runs_metering_edge_case_invalid_project_id` — Tests endpoint behavior with invalid project ID
+  - `test_field_extraction_from_api_response` — Tests field extraction from API response structures
 - **Pass Criteria**: Valid values and null accepted; invalid values, wrong types, and missing fields correctly rejected
 - **Fail Criteria**: Validator incorrectly accepts invalid data or rejects valid data
 
@@ -140,56 +167,56 @@ The test suite is organized into five logical groups, each targeting a specific 
 
 ### 4.1 `tests/test_runs_metering.py` — `GET /runs/metering`
 
-| Test Function                          | Description                            | Preconditions                              | Steps                                                                                          | Expected Result                                                                 |
-|----------------------------------------|----------------------------------------|--------------------------------------------|------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
-| `test_percent_complete_field_present`  | Verify field exists in response        | Valid project ID with run history          | 1. Call `GET /runs/metering?projectId={id}` 2. Parse JSON response 3. Inspect each run record  | `percent_complete` or `percentComplete` key exists in each run metering record   |
-| `test_percent_complete_type_valid`     | Verify field is numeric or null        | Valid project ID with run history          | 1. Call endpoint 2. Extract field value from each record 3. Check Python type                  | Value is `int`, `float`, or `None` for every run record                         |
-| `test_percent_complete_value_range`    | Verify value is within 0–100 inclusive | Valid project ID with completed runs       | 1. Call endpoint 2. Extract non-null field values 3. Assert bounds                             | `0.0 <= value <= 100.0` for every non-null value                                |
-| `test_response_status_code`            | Verify successful API response         | Valid authentication credentials           | 1. Call endpoint with valid auth 2. Check HTTP status code                                     | HTTP 200 OK                                                                     |
-| `test_field_naming_convention`         | Verify either snake_case or camelCase  | Valid project ID                           | 1. Call endpoint 2. Check for `percent_complete` key 3. Check for `percentComplete` key        | At least one of the two naming conventions is present in the response            |
+| Test Function                                       | Description                            | Preconditions                              | Steps                                                                                          | Expected Result                                                                 |
+|------------------------------------------------------|----------------------------------------|--------------------------------------------|------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| `test_percent_complete_present_in_runs_metering`     | Verify field exists in response        | Valid project ID with run history          | 1. Call `GET /runs/metering?projectId={id}` 2. Parse JSON response 3. Inspect each run record  | `percent_complete` or `percentComplete` key exists in each run metering record   |
+| `test_percent_complete_type_in_runs_metering`        | Verify field is numeric or null        | Valid project ID with run history          | 1. Call endpoint 2. Extract field value from each record 3. Check Python type                  | Value is `int`, `float`, or `None` for every run record                         |
+| `test_percent_complete_range_in_runs_metering`       | Verify value is within 0–100 inclusive | Valid project ID with completed runs       | 1. Call endpoint 2. Extract non-null field values 3. Assert bounds                             | `0.0 <= value <= 100.0` for every non-null value                                |
+| `test_runs_metering_response_is_valid_json`          | Verify successful API response         | Valid authentication credentials           | 1. Call endpoint with valid auth 2. Check response is valid JSON                               | HTTP 200 OK with valid JSON body                                                |
+| `test_percent_complete_field_naming_in_metering`     | Verify either snake_case or camelCase  | Valid project ID                           | 1. Call endpoint 2. Check for `percent_complete` key 3. Check for `percentComplete` key        | At least one of the two naming conventions is present in the response            |
 
 ### 4.2 `tests/test_runs_metering_current.py` — `GET /runs/metering/current`
 
-| Test Function                          | Description                            | Preconditions                              | Steps                                                                                          | Expected Result                                                                 |
-|----------------------------------------|----------------------------------------|--------------------------------------------|------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
-| `test_percent_complete_field_present`  | Verify field exists for current run    | Active code generation run                 | 1. Call `GET /runs/metering/current` 2. Parse JSON response 3. Inspect response object         | `percent_complete` or `percentComplete` field is present in the response         |
-| `test_percent_complete_type_valid`     | Verify field type                      | Active code generation run                 | 1. Call endpoint 2. Extract field value 3. Check Python type                                   | Value is `int`, `float`, or `None`                                              |
-| `test_percent_complete_value_range`    | Verify value range                     | Active run with progress data              | 1. Call endpoint 2. Extract non-null field value 3. Assert bounds                              | `0.0 <= value <= 100.0`                                                         |
-| `test_active_run_less_than_hundred`    | Verify in-progress value               | Known in-progress run (not yet completed)  | 1. Call endpoint 2. Extract field value 3. Assert value is strictly less than 100               | Value < 100 (in-progress runs should not report 100% completion)                |
-| `test_no_active_run_returns_null`      | Verify null when no active run         | No active code generation runs             | 1. Call endpoint 2. Parse response 3. Check field value                                        | Field value is `null` or the response indicates no active run appropriately     |
+| Test Function                                            | Description                            | Preconditions                              | Steps                                                                                          | Expected Result                                                                 |
+|----------------------------------------------------------|----------------------------------------|--------------------------------------------|------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| `test_percent_complete_present_in_current_metering`      | Verify field exists for current run    | Active code generation run                 | 1. Call `GET /runs/metering/current` 2. Parse JSON response 3. Inspect response object         | `percent_complete` or `percentComplete` field is present in the response         |
+| `test_percent_complete_type_in_current_metering`         | Verify field type                      | Active code generation run                 | 1. Call endpoint 2. Extract field value 3. Check Python type                                   | Value is `int`, `float`, or `None`                                              |
+| `test_percent_complete_range_in_current_metering`        | Verify value range                     | Active run with progress data              | 1. Call endpoint 2. Extract non-null field value 3. Assert bounds                              | `0.0 <= value <= 100.0`                                                         |
+| `test_current_metering_in_progress_value`                | Verify in-progress value               | Known in-progress run (not yet completed)  | 1. Call endpoint 2. Extract field value 3. Assert value is strictly less than 100               | Value < 100 (in-progress runs should not report 100% completion)                |
+| `test_percent_complete_null_for_no_active_run`           | Verify null when no active run         | No active code generation runs             | 1. Call endpoint 2. Parse response 3. Check field value                                        | Field value is `null` or the response indicates no active run appropriately     |
 
 > **Note**: Tests with the precondition "Active code generation run" are decorated with `@pytest.mark.requires_active_run` and will be automatically skipped if no active run is available, preventing false failures in environments without live runs.
 
 ### 4.3 `tests/test_project.py` — `GET /project`
 
-| Test Function                          | Description                                | Preconditions                          | Steps                                                                                                  | Expected Result                                                                 |
-|----------------------------------------|--------------------------------------------|----------------------------------------|--------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
-| `test_percent_complete_field_present`  | Verify field in nested metering block      | Valid project ID                       | 1. Call `GET /project?id={id}` 2. Parse JSON 3. Navigate to metering data block 4. Inspect for field   | `percent_complete` or `percentComplete` key present within the nested metering structure |
-| `test_percent_complete_type_valid`     | Verify field type in project response      | Valid project ID                       | 1. Call endpoint 2. Navigate to nested metering block 3. Extract field value 4. Check type             | Value is `int`, `float`, or `None`                                              |
-| `test_percent_complete_value_range`    | Verify value range                         | Valid project ID with run history      | 1. Call endpoint 2. Navigate to metering block 3. Extract non-null value 4. Assert bounds              | `0.0 <= value <= 100.0` when value is not null                                  |
-| `test_metering_block_exists`           | Verify metering data structure is present  | Valid project ID                       | 1. Call endpoint 2. Parse JSON response 3. Check for metering object/block                             | A metering data object or block is present in the project response              |
+| Test Function                                            | Description                                | Preconditions                          | Steps                                                                                                  | Expected Result                                                                 |
+|----------------------------------------------------------|--------------------------------------------|----------------------------------------|--------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| `test_percent_complete_present_in_project_metering`      | Verify field in nested metering block      | Valid project ID                       | 1. Call `GET /project?id={id}` 2. Parse JSON 3. Navigate to metering data block 4. Inspect for field   | `percent_complete` or `percentComplete` key present within the nested metering structure |
+| `test_percent_complete_type_in_project`                  | Verify field type in project response      | Valid project ID                       | 1. Call endpoint 2. Navigate to nested metering block 3. Extract field value 4. Check type             | Value is `int`, `float`, or `None`                                              |
+| `test_percent_complete_range_in_project`                 | Verify value range                         | Valid project ID with run history      | 1. Call endpoint 2. Navigate to metering block 3. Extract non-null value 4. Assert bounds              | `0.0 <= value <= 100.0` when value is not null                                  |
+| `test_project_response_contains_metering_block`          | Verify metering data structure is present  | Valid project ID                       | 1. Call endpoint 2. Parse JSON response 3. Check for metering object/block                             | A metering data object or block is present in the project response              |
 
 ### 4.4 `tests/test_cross_api_consistency.py`
 
-| Test Function                              | Description                                | Preconditions                                  | Steps                                                                                                                          | Expected Result                                                                                           |
-|--------------------------------------------|--------------------------------------------|-------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| `test_field_present_in_all_endpoints`      | Verify field present across all three APIs | Valid project ID with existing run history      | 1. Call `GET /runs/metering?projectId={id}` 2. Call `GET /runs/metering/current` 3. Call `GET /project?id={id}` 4. Check each  | `percent_complete` or `percentComplete` field is present in every response from all three endpoints        |
-| `test_field_consistency_across_endpoints`  | Verify logical value consistency           | Valid project ID with a completed run           | 1. Call all three endpoints for the same project 2. Extract `percent_complete` values 3. Compare logically                     | Values are logically consistent (e.g., a completed run shows approximately 100 across all endpoints)       |
-| `test_field_naming_consistency`            | Check naming convention across APIs        | Valid project ID                                | 1. Call all three endpoints 2. Record which field name (`percent_complete` vs `percentComplete`) each uses                     | Document which convention each endpoint uses; either convention is valid but absence of both is a defect   |
+| Test Function                                            | Description                                | Preconditions                                  | Steps                                                                                                                          | Expected Result                                                                                           |
+|----------------------------------------------------------|--------------------------------------------|-------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| `test_percent_complete_present_in_all_endpoints`         | Verify field present across all three APIs | Valid project ID with existing run history      | 1. Call `GET /runs/metering?projectId={id}` 2. Call `GET /runs/metering/current` 3. Call `GET /project?id={id}` 4. Check each  | `percent_complete` or `percentComplete` field is present in every response from all three endpoints        |
+| `test_percent_complete_value_logical_consistency`        | Verify logical value consistency           | Valid project ID with a completed run           | 1. Call all three endpoints for the same project 2. Extract `percent_complete` values 3. Compare logically                     | Values are logically consistent (e.g., a completed run shows approximately 100 across all endpoints)       |
+| `test_percent_complete_field_name_consistency`           | Check naming convention across APIs        | Valid project ID                                | 1. Call all three endpoints 2. Record which field name (`percent_complete` vs `percentComplete`) each uses                     | Document which convention each endpoint uses; either convention is valid but absence of both is a defect   |
 
 ### 4.5 `tests/test_edge_cases.py`
 
-| Test Function                          | Description                              | Preconditions                          | Steps                                                            | Expected Result                                                                 |
-|----------------------------------------|------------------------------------------|----------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------------------|
-| `test_boundary_exactly_zero`           | Boundary: value = 0.0                    | Test data or mock with value 0.0       | 1. Pass value `0.0` to validator 2. Assert acceptance            | Value `0.0` is accepted as valid (lower bound inclusive)                        |
-| `test_boundary_exactly_hundred`        | Boundary: value = 100.0                  | Test data or mock with value 100.0     | 1. Pass value `100.0` to validator 2. Assert acceptance          | Value `100.0` is accepted as valid (upper bound inclusive)                      |
-| `test_null_value_accepted`             | Null handling                            | No-data scenario or mock               | 1. Pass `None`/`null` to validator 2. Assert acceptance          | `null` is accepted as a valid value (represents "not applicable" or "no data")  |
-| `test_value_over_hundred_invalid`      | Negative: value > 100                    | Simulated/mock data with value 150.0   | 1. Pass value `150.0` to validator 2. Assert rejection           | Value flagged as invalid — exceeds maximum allowed range                        |
-| `test_negative_value_invalid`          | Negative: value < 0                      | Simulated/mock data with value -10.0   | 1. Pass value `-10.0` to validator 2. Assert rejection           | Value flagged as invalid — below minimum allowed range                          |
-| `test_wrong_type_string_invalid`       | Negative: string type                    | Simulated/mock data with value `"50%"` | 1. Pass string `"50%"` to validator 2. Assert rejection          | Value flagged as invalid — string type is not accepted                          |
-| `test_wrong_type_boolean_invalid`      | Negative: boolean type                   | Simulated/mock data with value `true`  | 1. Pass boolean `True` to validator 2. Assert rejection          | Value flagged as invalid — boolean type is not accepted                         |
-| `test_field_completely_missing`        | Negative: field absent under both names  | Simulated response with no field       | 1. Construct a mock response without either field name variant 2. Check both keys | Flagged as a defect — test failure indicates a bug in the API response          |
-| `test_integer_value_accepted`          | Integer within range                     | Value like `50` (not `50.0`)           | 1. Pass integer `50` to validator 2. Assert acceptance           | Value `50` (integer) is accepted — both `int` and `float` types are valid      |
+| Test Function                                              | Description                              | Preconditions                          | Steps                                                            | Expected Result                                                                 |
+|------------------------------------------------------------|------------------------------------------|----------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| `test_validate_percent_complete_exactly_zero`              | Boundary: value = 0.0                    | Test data or mock with value 0.0       | 1. Pass value `0.0` to validator 2. Assert acceptance            | Value `0.0` is accepted as valid (lower bound inclusive)                        |
+| `test_validate_percent_complete_exactly_hundred`           | Boundary: value = 100.0                  | Test data or mock with value 100.0     | 1. Pass value `100.0` to validator 2. Assert acceptance          | Value `100.0` is accepted as valid (upper bound inclusive)                      |
+| `test_validate_percent_complete_null_value`                | Null handling                            | No-data scenario or mock               | 1. Pass `None`/`null` to validator 2. Assert acceptance          | `null` is accepted as a valid value (represents "not applicable" or "no data")  |
+| `test_validate_percent_complete_exceeds_hundred`           | Negative: value > 100                    | Simulated/mock data with value 150.0   | 1. Pass value `150.0` to validator 2. Assert rejection           | Value flagged as invalid — exceeds maximum allowed range                        |
+| `test_validate_percent_complete_below_zero`                | Negative: value < 0                      | Simulated/mock data with value -10.0   | 1. Pass value `-10.0` to validator 2. Assert rejection           | Value flagged as invalid — below minimum allowed range                          |
+| `test_validate_percent_complete_wrong_type_string`         | Negative: string type                    | Simulated/mock data with value `"50%"` | 1. Pass string `"50%"` to validator 2. Assert rejection          | Value flagged as invalid — string type is not accepted                          |
+| `test_validate_percent_complete_wrong_type_boolean`        | Negative: boolean type                   | Simulated/mock data with value `true`  | 1. Pass boolean `True` to validator 2. Assert rejection          | Value flagged as invalid — boolean type is not accepted                         |
+| `test_field_presence_neither_convention_raises_error`      | Negative: field absent under both names  | Simulated response with no field       | 1. Construct a mock response without either field name variant 2. Check both keys | Flagged as a defect — test failure indicates a bug in the API response          |
+| `test_validate_percent_complete_integer_values`            | Integer within range                     | Value like `50` (not `50.0`)           | 1. Pass integer `50` to validator 2. Assert acceptance           | Value `50` (integer) is accepted — both `int` and `float` types are valid      |
 
 ---
 
@@ -279,12 +306,12 @@ Before executing the test suite, ensure the following prerequisites are satisfie
 
 This matrix is derived from the user-defined validation scenarios and maps each expected platform state to the corresponding test function that verifies it.
 
-| Scenario         | Expected Value            | Validating Test Function                   | Test File                              |
-|------------------|---------------------------|--------------------------------------------|----------------------------------------|
-| Completed run    | Value between 0–100       | `test_percent_complete_value_range`        | `test_runs_metering.py`, `test_project.py` |
-| In-progress run  | Likely less than 100      | `test_active_run_less_than_hundred`        | `test_runs_metering_current.py`        |
-| No data          | `null`                    | `test_null_value_accepted`                 | `test_edge_cases.py`                   |
-| Field missing    | Bug — test failure        | `test_percent_complete_field_present`      | `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py` |
+| Scenario         | Expected Value            | Validating Test Function                                         | Test File                              |
+|------------------|---------------------------|------------------------------------------------------------------|----------------------------------------|
+| Completed run    | Value between 0–100       | `test_percent_complete_range_in_runs_metering`, `test_percent_complete_range_in_project` | `test_runs_metering.py`, `test_project.py` |
+| In-progress run  | Likely less than 100      | `test_current_metering_in_progress_value`                        | `test_runs_metering_current.py`        |
+| No data          | `null`                    | `test_validate_percent_complete_null_value`                      | `test_edge_cases.py`                   |
+| Field missing    | Bug — test failure        | `test_percent_complete_present_in_runs_metering`, `test_percent_complete_present_in_current_metering`, `test_percent_complete_present_in_project_metering` | `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py` |
 
 ---
 

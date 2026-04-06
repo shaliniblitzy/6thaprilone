@@ -53,9 +53,12 @@ Fixtures (from conftest.py)
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import pytest
+
+if TYPE_CHECKING:
+    from src.config import Settings
 
 from src.api_client import APIClient
 from src.validators import (
@@ -378,7 +381,7 @@ def test_percent_complete_present_in_all_endpoints(
 def test_percent_complete_field_name_consistency(
     api_client: APIClient,
     test_project_id: str,
-    settings: Any,
+    settings: Settings,
 ) -> None:
     """Document the naming convention each endpoint uses for ``percent_complete``.
 
@@ -739,9 +742,14 @@ def test_endpoints_return_structured_data(
     # ---- Endpoint 2: GET /runs/metering/current ----
     try:
         response = api_client.get_runs_metering_current()
-        if not isinstance(response, dict):
+        if response is None:
+            # None is a legitimate response when no active run exists.
+            # This is not a structural defect — skip validation for this
+            # endpoint rather than flagging a false failure.
+            pass
+        elif not isinstance(response, dict):
             structure_issues.append(
-                f"{_EP_RUNS_METERING_CURRENT}: expected dict, "
+                f"{_EP_RUNS_METERING_CURRENT}: expected dict or None, "
                 f"got {type(response).__name__}"
             )
         else:
