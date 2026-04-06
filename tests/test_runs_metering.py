@@ -340,7 +340,6 @@ def test_percent_complete_null_acceptance_in_metering(
         f"{test_project_id}. Cannot validate null acceptance without data."
     )
 
-    null_found = False
     for idx, record in enumerate(records):
         assert isinstance(record, dict), (
             f"GET /runs/metering record at index {idx} is not a dict: "
@@ -351,8 +350,6 @@ def test_percent_complete_null_acceptance_in_metering(
             PERCENT_COMPLETE_FIELD_NAMES,
             endpoint=f"GET /runs/metering [record {idx}]",
         )
-        if value is None:
-            null_found = True
         # Regardless of whether value is null or numeric, validate it —
         # validate_percent_complete explicitly accepts None.
         validate_percent_complete(

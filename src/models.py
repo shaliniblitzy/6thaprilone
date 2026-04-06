@@ -46,7 +46,7 @@ Usage Example::
     assert proj.metering.percent_complete == 99.9
 """
 
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
