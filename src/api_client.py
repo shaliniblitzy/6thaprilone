@@ -33,11 +33,15 @@ APIClient : class
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any, Optional
 
 import requests
 
 from src.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class APIClient:
@@ -215,15 +219,22 @@ class APIClient:
         endpoint: str,
         params: Optional[dict] = None,
     ) -> Any:
-        """Execute an HTTP request and return the parsed JSON body.
+        """Execute an HTTP request with retry logic and return the parsed JSON body.
 
         This is the single internal choke-point through which every
         public endpoint method dispatches its request.  It handles:
 
         1. URL construction by joining ``self.base_url`` with *endpoint*.
-        2. Request dispatch via ``self.session.request()``.
+        2. Request dispatch via ``self.session.request()`` with retry
+           logic for transient failures (connection errors, timeouts,
+           and server-side 5xx errors).
         3. HTTP-error detection via ``Response.raise_for_status()``.
         4. JSON response parsing via ``Response.json()``.
+
+        Retry behaviour is governed by ``settings.retry_count`` and
+        ``settings.retry_delay``.  Client-side errors (4xx) are **not**
+        retried because they typically indicate a permanent problem
+        (bad credentials, missing resource, invalid parameters).
 
         Parameters
         ----------
@@ -246,20 +257,106 @@ class APIClient:
         Raises
         ------
         requests.exceptions.HTTPError
-            If the server responds with a 4xx or 5xx status code.
+            If the server responds with a 4xx or 5xx status code and
+            all retry attempts have been exhausted.
         requests.exceptions.ConnectionError
-            If a network-level connection cannot be established.
+            If a network-level connection cannot be established after
+            all retry attempts.
         requests.exceptions.Timeout
-            If the request exceeds ``settings.test_timeout`` seconds.
+            If every attempt exceeds ``settings.test_timeout`` seconds.
         ValueError
             If the response body is not valid JSON.
         """
         url: str = f"{self.base_url}{endpoint}"
-        response: requests.Response = self.session.request(
-            method=method,
-            url=url,
-            params=params,
-            timeout=self.settings.test_timeout,
+        max_attempts: int = 1 + max(0, self.settings.retry_count)
+        last_exception: Optional[Exception] = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.debug(
+                    "API request: %s %s params=%s (attempt %d/%d)",
+                    method,
+                    url,
+                    params,
+                    attempt,
+                    max_attempts,
+                )
+                response: requests.Response = self.session.request(
+                    method=method,
+                    url=url,
+                    params=params,
+                    timeout=self.settings.test_timeout,
+                )
+                logger.debug(
+                    "API response: %s %s → HTTP %d (%d bytes)",
+                    method,
+                    url,
+                    response.status_code,
+                    len(response.content),
+                )
+                response.raise_for_status()
+                return response.json()
+
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ) as exc:
+                # Transient network failure — retry if attempts remain.
+                last_exception = exc
+                if attempt < max_attempts:
+                    logger.warning(
+                        "Transient error on attempt %d/%d for %s %s: %s. "
+                        "Retrying in %.1fs…",
+                        attempt,
+                        max_attempts,
+                        method,
+                        url,
+                        exc,
+                        self.settings.retry_delay,
+                    )
+                    time.sleep(self.settings.retry_delay)
+                else:
+                    logger.error(
+                        "All %d attempts exhausted for %s %s: %s",
+                        max_attempts,
+                        method,
+                        url,
+                        exc,
+                    )
+                    raise
+
+            except requests.exceptions.HTTPError as exc:
+                # 5xx server errors are transient — retry if attempts remain.
+                # 4xx client errors are permanent — fail immediately.
+                last_exception = exc
+                status_code = (
+                    exc.response.status_code if exc.response is not None else 0
+                )
+                if 500 <= status_code < 600 and attempt < max_attempts:
+                    logger.warning(
+                        "Server error (HTTP %d) on attempt %d/%d for %s %s. "
+                        "Retrying in %.1fs…",
+                        status_code,
+                        attempt,
+                        max_attempts,
+                        method,
+                        url,
+                        self.settings.retry_delay,
+                    )
+                    time.sleep(self.settings.retry_delay)
+                else:
+                    logger.error(
+                        "HTTP error for %s %s: %s",
+                        method,
+                        url,
+                        exc,
+                    )
+                    raise
+
+        # Unreachable under normal flow, but satisfies type checkers.
+        if last_exception is not None:  # pragma: no cover
+            raise last_exception
+        raise RuntimeError(  # pragma: no cover
+            f"Unexpected state: all {max_attempts} attempts completed "
+            f"without returning or raising for {method} {url}"
         )
-        response.raise_for_status()
-        return response.json()

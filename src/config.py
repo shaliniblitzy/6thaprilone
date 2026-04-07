@@ -105,6 +105,23 @@ class Settings(BaseModel):
         description="Log level for test output (DEBUG, INFO, WARNING, ERROR)",
     )
 
+    # --- Retry Configuration (populated from settings.yaml) -----------------
+    retry_count: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Number of retry attempts for transient network failures "
+            "before marking a request as failed."
+        ),
+    )
+    retry_delay: float = Field(
+        default=1.0,
+        ge=0.0,
+        description=(
+            "Seconds to wait between retry attempts (simple linear backoff)."
+        ),
+    )
+
     # --- Endpoint Configuration (typically from settings.yaml) --------------
     endpoint_paths: Dict[str, str] = Field(
         default_factory=lambda: {
@@ -171,6 +188,17 @@ class Settings(BaseModel):
                         ["percent_complete", "percentComplete"],
                     )
                 )
+            # Load retry configuration from test_defaults block
+            if "test_defaults" in yaml_config:
+                test_defaults_block = yaml_config["test_defaults"]
+                if "retry_count" in test_defaults_block:
+                    env_settings["retry_count"] = int(
+                        test_defaults_block["retry_count"]
+                    )
+                if "retry_delay" in test_defaults_block:
+                    env_settings["retry_delay"] = float(
+                        test_defaults_block["retry_delay"]
+                    )
 
         return cls(**env_settings)
 

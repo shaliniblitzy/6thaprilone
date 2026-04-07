@@ -60,7 +60,7 @@ Usage Example::
     assert value == 99.9
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 # ---------------------------------------------------------------------------
@@ -240,3 +240,116 @@ def get_percent_complete_value(
         endpoint=endpoint,
     )
     return response_data[found_field_name]
+
+
+# ---------------------------------------------------------------------------
+# validate_response_structure — structural sanity checks on API responses
+# ---------------------------------------------------------------------------
+
+def validate_response_structure(
+    response_data: Any,
+    endpoint: str = "",
+) -> Tuple[str, Any]:
+    """Validate the top-level structure of an API response and locate the
+    ``percent_complete`` field.
+
+    Performs a series of structural sanity checks to ensure the API response
+    is well-formed and contains the expected ``percent_complete`` field in a
+    discoverable location.  Returns a ``(found_field_name, value)`` tuple
+    for downstream validation.
+
+    The function handles multiple response envelope shapes:
+
+    * **Flat dict** — ``percent_complete`` is a direct key
+    * **Wrapped list** — the response contains a ``data``, ``runs``,
+      ``results``, or ``items`` key holding a list of record dicts
+    * **Nested metering block** — a ``metering`` key holds a sub-dict
+      containing ``percent_complete`` (typical for ``GET /project``)
+
+    Parameters
+    ----------
+    response_data : Any
+        The raw parsed JSON body from the API.
+    endpoint : str, optional
+        API endpoint identifier for descriptive error messages.
+
+    Returns
+    -------
+    Tuple[str, Any]
+        A 2-tuple of ``(found_field_name, value)`` where
+        *found_field_name* is the key under which the field was discovered
+        and *value* is the associated value (may be ``None``).
+
+    Raises
+    ------
+    AssertionError
+        If *response_data* is not a ``dict`` or ``list``, or if the
+        ``percent_complete`` field cannot be located in any recognised
+        location within the response structure.
+    """
+    _tag: str = f"[{endpoint}] " if endpoint else ""
+
+    # ------------------------------------------------------------------
+    # Step 1: Top-level type check
+    # ------------------------------------------------------------------
+    assert isinstance(response_data, (dict, list)), (
+        f"{_tag}Expected API response to be a dict or list, "
+        f"got {type(response_data).__name__}: {response_data!r}"
+    )
+
+    # ------------------------------------------------------------------
+    # Step 2: Locate percent_complete in the structure
+    # ------------------------------------------------------------------
+
+    # Case A: response is a dict — search directly, then nested locations
+    if isinstance(response_data, dict):
+        # A.1 — Direct key match at the top level
+        for field_name in PERCENT_COMPLETE_FIELD_NAMES:
+            if field_name in response_data:
+                return field_name, response_data[field_name]
+
+        # A.2 — Nested inside a "metering" sub-object
+        metering_keys = ("metering", "metering_data", "meteringData")
+        for mkey in metering_keys:
+            if mkey in response_data and isinstance(response_data[mkey], dict):
+                sub = response_data[mkey]
+                for field_name in PERCENT_COMPLETE_FIELD_NAMES:
+                    if field_name in sub:
+                        return field_name, sub[field_name]
+
+        # A.3 — Inside a list wrapper (data, runs, results, items)
+        for wrapper_key in ("data", "runs", "results", "items"):
+            if wrapper_key in response_data:
+                inner = response_data[wrapper_key]
+                if isinstance(inner, list) and inner:
+                    first = inner[0]
+                    if isinstance(first, dict):
+                        for field_name in PERCENT_COMPLETE_FIELD_NAMES:
+                            if field_name in first:
+                                return field_name, first[field_name]
+
+    # Case B: response is a list — check the first element
+    if isinstance(response_data, list):
+        assert len(response_data) > 0, (
+            f"{_tag}Response is an empty list — cannot locate "
+            f"percent_complete field."
+        )
+        first_item = response_data[0]
+        assert isinstance(first_item, dict), (
+            f"{_tag}First element in response list is not a dict: "
+            f"got {type(first_item).__name__}"
+        )
+        for field_name in PERCENT_COMPLETE_FIELD_NAMES:
+            if field_name in first_item:
+                return field_name, first_item[field_name]
+
+    # ------------------------------------------------------------------
+    # Step 3: Field not found anywhere — assertion failure
+    # ------------------------------------------------------------------
+    raise AssertionError(
+        f"{_tag}percent_complete field not found anywhere in the API "
+        f"response structure.  Checked field names: "
+        f"{PERCENT_COMPLETE_FIELD_NAMES}.  "
+        f"Response type: {type(response_data).__name__}.  "
+        f"Top-level keys: {sorted(response_data.keys()) if isinstance(response_data, dict) else 'N/A (list)'}."
+    )
