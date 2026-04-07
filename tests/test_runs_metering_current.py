@@ -118,7 +118,6 @@ def test_current_metering_response_is_valid(
 @pytest.mark.runs_metering_current
 @pytest.mark.requires_active_run
 def test_percent_complete_present_in_current_metering(
-    api_client: APIClient,
     active_run_check: Dict[str, Any],
 ) -> None:
     """R-001 — ``percent_complete`` field exists in current metering response.
@@ -144,7 +143,6 @@ def test_percent_complete_present_in_current_metering(
 @pytest.mark.runs_metering_current
 @pytest.mark.requires_active_run
 def test_percent_complete_field_naming_convention(
-    api_client: APIClient,
     active_run_check: Dict[str, Any],
 ) -> None:
     """Document which naming convention ``GET /runs/metering/current`` uses.
@@ -184,7 +182,6 @@ def test_percent_complete_field_naming_convention(
 @pytest.mark.runs_metering_current
 @pytest.mark.requires_active_run
 def test_percent_complete_type_in_current_metering(
-    api_client: APIClient,
     active_run_check: Dict[str, Any],
 ) -> None:
     """R-002 — ``percent_complete`` is numeric (int/float) or null.
@@ -227,7 +224,6 @@ def test_percent_complete_type_in_current_metering(
 @pytest.mark.runs_metering_current
 @pytest.mark.requires_active_run
 def test_percent_complete_range_in_current_metering(
-    api_client: APIClient,
     active_run_check: Dict[str, Any],
 ) -> None:
     """R-003 — ``percent_complete`` is within [0.0, 100.0] when not null.
@@ -274,7 +270,6 @@ def test_percent_complete_range_in_current_metering(
 @pytest.mark.runs_metering_current
 @pytest.mark.requires_active_run
 def test_current_metering_in_progress_value(
-    api_client: APIClient,
     active_run_check: Dict[str, Any],
 ) -> None:
     """An actively in-progress run should report ``percent_complete < 100``.

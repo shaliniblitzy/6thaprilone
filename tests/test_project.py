@@ -111,13 +111,11 @@ def _get_metering_block(response_data: Dict[str, Any]) -> Dict[str, Any]:
             return response_data[key_name]
 
     available_keys = sorted(response_data.keys())
-    assert False, (
+    raise AssertionError(
         f"[{_ENDPOINT}] response missing metering block. "
         f"Checked key names: {METERING_BLOCK_KEY_NAMES}. "
         f"Available top-level keys: {available_keys}"
     )
-    # Unreachable — satisfies type checkers expecting a return on all paths.
-    return {}  # pragma: no cover
 
 
 # ===========================================================================

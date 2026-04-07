@@ -185,15 +185,11 @@ def validate_field_presence(
 
     # None of the expected field names were found — this is a bug in the API.
     _endpoint_tag: str = f"[{endpoint}] " if endpoint else ""
-    assert False, (
+    raise AssertionError(
         f"{_endpoint_tag}percent_complete field not found in response. "
         f"Checked field names: {field_names}. "
         f"Available keys: {sorted(response_data.keys())}"
     )
-
-    # The following return is unreachable because assert False always raises,
-    # but it satisfies type checkers that expect a str return in all branches.
-    return ""  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------

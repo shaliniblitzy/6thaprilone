@@ -451,7 +451,10 @@ def test_completed_run_percent_complete(
         for status_key in status_field_names:
             if status_key in record:
                 status_val = record[status_key]
-                if isinstance(status_val, str) and status_val in completed_status_values:
+                if (
+                    isinstance(status_val, str)
+                    and status_val in completed_status_values
+                ):
                     is_completed = True
                     break
 
@@ -491,7 +494,10 @@ def test_completed_run_percent_complete(
                 endpoint=f"GET /runs/metering [record {idx}]",
             )
             if value is not None:
-                assert isinstance(value, (int, float)) and not isinstance(value, bool), (
+                assert (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                ), (
                     f"GET /runs/metering record at index {idx} "
                     f"has non-numeric percent_complete: "
                     f"got {type(value).__name__}: {value!r}"

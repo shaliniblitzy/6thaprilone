@@ -33,8 +33,9 @@ APIClient : class
 
 from __future__ import annotations
 
-import requests
 from typing import Any, Optional
+
+import requests
 
 from src.config import Settings
 
