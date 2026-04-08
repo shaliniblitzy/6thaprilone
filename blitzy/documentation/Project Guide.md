@@ -1,4 +1,4 @@
-# Blitzy Project Guide — percent_complete API Test Suite
+# Blitzy Project Guide
 
 ---
 
@@ -6,58 +6,56 @@
 
 ### 1.1 Project Overview
 
-This project delivers a complete, greenfield Python-based automated API test suite that validates the `percent_complete` (or `percentComplete`) field across three Blitzy Platform API endpoints: `GET /runs/metering`, `GET /runs/metering/current`, and `GET /project`. The test suite verifies field presence, data type correctness (numeric or null), value range compliance (0.0–100.0), cross-API consistency, and edge case coverage. It targets the QA and platform engineering teams to ensure the newly introduced metering progress field meets its contract across all consuming API surfaces.
+This project addresses a **bug fix** in the Blitzy Platform API Test Suite — specifically, a missing type-safety guard in the `_get_metering_block()` helper function within `tests/test_project.py`. The function extracts the nested metering data object from `GET /project` API responses but returned the raw value at the metering key without validating that it is a `dict`. When the API returns `{"metering": null}` or a non-dict value, two of seven `GET /project` tests crashed with `TypeError`/`AttributeError` instead of descriptive `AssertionError` messages. The fix adds a centralized `isinstance(value, dict)` assertion inside `_get_metering_block()`, protecting all 7 callers automatically.
 
 ### 1.2 Completion Status
 
 ```mermaid
-pie title Project Completion — 80.7%
-    "Completed (AI)" : 67
-    "Remaining" : 16
+pie title Completion Status
+    "Completed (3.5h)" : 3.5
+    "Remaining (1.5h)" : 1.5
 ```
 
 | Metric | Value |
-|---|---|
-| **Total Project Hours** | 83h |
-| **Completed Hours (AI)** | 67h |
-| **Remaining Hours** | 16h |
-| **Completion Percentage** | 80.7% (67h / 83h) |
+|--------|-------|
+| **Total Project Hours** | 5.0 |
+| **Completed Hours (AI)** | 3.5 |
+| **Remaining Hours** | 1.5 |
+| **Completion Percentage** | **70.0%** |
+
+**Calculation**: 3.5 completed hours / 5.0 total hours = 70.0% complete.
 
 ### 1.3 Key Accomplishments
 
-- ✅ Built complete API test infrastructure from scratch (greenfield → 7,462 lines across 21 files)
-- ✅ Implemented HTTP client with session pooling, retry logic, and bearer token authentication
-- ✅ Created Pydantic v2 response models with dual field-name support (snake_case + camelCase)
-- ✅ Developed custom validation utilities for field presence, type, and range checks
-- ✅ Delivered 137 total test cases (102 passing unit tests + 35 integration tests designed to gracefully skip without credentials)
-- ✅ Achieved zero compilation errors, zero test failures, and zero PEP 8 violations across all 12 Python files
-- ✅ Full requirements coverage: R-001 (Field Presence), R-002 (Data Type), R-003 (Value Range), R-004 (Cross-API Consistency), R-005 (Edge Cases)
-- ✅ Comprehensive documentation: README, formal test plan, and API response contracts specification
-- ✅ Security hardening: API token masking in Settings repr, CVE-2025-71176 documented with mitigation
+- [x] Root cause identified: missing `isinstance` guard at `tests/test_project.py` line 111
+- [x] Bug fix implemented: 9-line guarded return replaces 3-line unconditional return in `_get_metering_block()`
+- [x] Fix verified against 3 core scenarios: `None` raises `AssertionError`, `"loading"` raises `AssertionError`, valid `dict` returns correctly
+- [x] Edge case sweep completed: 7 non-dict types (None, str, int, bool×2, list, float) correctly rejected; 3 valid dicts correctly accepted
+- [x] Full regression test suite passes: 102 passed, 35 skipped, 0 failed — identical to pre-fix baseline
+- [x] All 10 Python source files compile without errors via `python -m py_compile`
+- [x] Fix committed: `28dd987 — fix: add isinstance(value, dict) type guard in _get_metering_block()`
 
 ### 1.4 Critical Unresolved Issues
 
 | Issue | Impact | Owner | ETA |
-|---|---|---|---|
-| Integration tests cannot execute without live API credentials | 35 tests remain unvalidated against real API responses | Human Developer | 1–2 days after credential provisioning |
-| CVE-2025-71176 in pytest (temp directory symlink attack, CVSS 6.8) | Low risk for dev-only tooling; no patched release available | Upstream pytest maintainers | Monitoring [pytest#13669](https://github.com/pytest-dev/pytest/issues/13669) |
+|-------|--------|-------|-----|
+| 35 integration tests skipped due to missing API credentials (BASE_URL, API_TOKEN, TEST_PROJECT_ID, TEST_RUN_ID) | Cannot verify fix against live Blitzy Platform API | Human Developer | 0.5h after credential setup |
+| `_get_metering_block()` docstring Raises section does not document new type-check AssertionError | Minor documentation gap — function contract incomplete | Human Developer | 0.5h |
 
 ### 1.5 Access Issues
 
 | System/Resource | Type of Access | Issue Description | Resolution Status | Owner |
-|---|---|---|---|---|
-| Blitzy Platform API | API Bearer Token | `API_TOKEN` environment variable not configured — required for integration test execution | Unresolved | Human Developer |
-| Blitzy Platform API | Base URL | `BASE_URL` environment variable not configured — required for all API requests | Unresolved | Human Developer |
-| Test Project Data | Project Identifier | `TEST_PROJECT_ID` not configured — required to target a project with code generation run history | Unresolved | Human Developer |
-| Test Run Data | Run Identifier | `TEST_RUN_ID` not configured — required for targeted metering tests | Unresolved | Human Developer |
+|-----------------|---------------|-------------------|-------------------|-------|
+| Blitzy Platform API | API Token (Bearer) | `API_TOKEN` environment variable not set — required for 35 integration tests | Unresolved | Human Developer |
+| Blitzy Platform API | Base URL | `BASE_URL` environment variable not set — required for API endpoint access | Unresolved | Human Developer |
+| Test Data | Project ID | `TEST_PROJECT_ID` not configured — required for `GET /project` and `GET /runs/metering` tests | Unresolved | Human Developer |
+| Test Data | Run ID | `TEST_RUN_ID` not configured — required for run-specific metering tests | Unresolved | Human Developer |
 
 ### 1.6 Recommended Next Steps
 
-1. **[High]** Provision Blitzy Platform API credentials and configure `.env` file with `BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`, and `TEST_RUN_ID`
-2. **[High]** Execute the 35 integration tests against the live API and analyze results for field contract compliance
-3. **[Medium]** Set up CI/CD pipeline (e.g., GitHub Actions) to run the test suite on schedule or per-commit
-4. **[Medium]** Establish credential rotation strategy and secure secrets management for CI environments
-5. **[Low]** Evaluate adding response time benchmarking or load testing for the metering endpoints
+1. **[High]** Configure `.env` file with live API credentials (`BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`, `TEST_RUN_ID`) and execute the 35 skipped integration tests to confirm the fix works against the real Blitzy Platform API
+2. **[High]** Conduct code review of the 11-line diff in `tests/test_project.py` and merge the PR
+3. **[Low]** Update the `_get_metering_block()` docstring Raises section to document the new `AssertionError` for non-dict metering values, following the NumPy-style convention used throughout the codebase
 
 ---
 
@@ -66,56 +64,47 @@ pie title Project Completion — 80.7%
 ### 2.1 Completed Work Detail
 
 | Component | Hours | Description |
-|---|---|---|
-| README.md — Project Documentation | 2.0 | Replaced placeholder with 280-line comprehensive documentation including setup, execution, and manual QA reference |
-| requirements.txt — Dependency Manifest | 0.5 | Created manifest with all 8 required Python packages, version constraints, and CVE documentation |
-| .env.example — Environment Template | 0.5 | Created template with 4 required + 2 optional environment variables and descriptive comments |
-| pytest.ini — Test Framework Config | 1.0 | Configured test discovery, 6 custom markers, timeout settings, strict mode, and live logging |
-| config/settings.yaml — Feature Config | 1.5 | Defined endpoint paths, query parameters, field name variants, and validation parameter defaults (121 lines) |
-| src/config.py — Configuration Module | 5.0 | Pydantic BaseModel with env loading, YAML parsing, endpoint URL construction, and validation helpers (326 lines) |
-| src/api_client.py — HTTP Client | 6.0 | Session-based client with 3 endpoint methods, retry logic, auth header injection, and error propagation (362 lines) |
-| src/validators.py — Validation Utilities | 4.0 | 4 validation functions: percent_complete value, field presence, value extraction, response structure (355 lines) |
-| src/models.py — Pydantic Response Models | 4.0 | 5 models with dual field-name aliases, range constraints, extra field preservation (231 lines) |
-| src/__init__.py — Source Package Init | 0.5 | Package initializer with module docstring |
-| tests/conftest.py — Shared Fixtures | 4.0 | Session-scoped settings, api_client, project/run ID fixtures, skip markers, field name lists (285 lines) |
-| tests/test_runs_metering.py | 5.0 | 9 test functions for GET /runs/metering covering R-001, R-002, R-003 (509 lines) |
-| tests/test_runs_metering_current.py | 4.0 | 8 test functions for GET /runs/metering/current covering R-001, R-002, R-003 (437 lines) |
-| tests/test_project.py | 5.0 | 9 test functions for GET /project with nested metering block validation (514 lines) |
-| tests/test_cross_api_consistency.py | 6.0 | 7 test functions verifying R-004 cross-API field consistency (806 lines) |
-| tests/test_edge_cases.py | 8.0 | 102 test cases covering R-005: boundary values, type mismatches, model validation, config, client (1261 lines) |
-| tests/__init__.py — Test Package Init | 0.5 | Package initializer with module docstring |
-| docs/test_plan.md — Formal Test Plan | 3.0 | Requirements traceability matrix, test execution strategy, preconditions (385 lines) |
-| docs/api_contracts.md — API Contracts | 3.0 | JSON response contract documentation for all 3 endpoints with field specifications (508 lines) |
-| Quality, Security & Lint Fixes | 3.5 | Code refactoring, unused import removal, api_token masking, CVE documentation, merge conflict resolution |
-| **Total Completed** | **67.0** | |
+|-----------|-------|-------------|
+| Root Cause Analysis & Diagnostics | 1.0 | Traced bug through `_get_metering_block()` → 7 call sites → identified 2 vulnerable sites (lines 200, 246/260) missing `isinstance` guard vs. 5 safe sites with guards; reproduced with `None` and `"loading"` inputs |
+| Bug Fix Implementation | 0.5 | Replaced 3-line unconditional `return response_data[key_name]` with 9-line guarded return including `isinstance(value, dict)` assertion with descriptive `[GET /project]` message; committed as `28dd987` |
+| Fix Verification — Core & Edge Cases | 1.0 | Verified 3 core scenarios (None→AssertionError, string→AssertionError, valid dict→returned correctly); swept 7 non-dict types (None, str, int, bool×2, list, float) + 3 valid dicts ({}, {percent_complete:0.0}, {percentComplete:100.0}) |
+| Regression Testing & Compilation | 1.0 | Ran full pytest suite (102 passed, 35 skipped, 0 failed in 0.14s); ran `py_compile` on all 10 Python source files — all syntax OK |
+| **Total** | **3.5** | |
 
 ### 2.2 Remaining Work Detail
 
 | Category | Hours | Priority |
-|---|---|---|
-| API Credential Configuration — Set up `.env` with BASE_URL, API_TOKEN, TEST_PROJECT_ID, TEST_RUN_ID | 3.0 | High |
-| Integration Test Execution — Run 35 skipped tests against live Blitzy Platform API | 4.0 | High |
-| Integration Test Defect Analysis — Investigate and resolve any failures from live API responses | 4.0 | Medium |
-| CI/CD Pipeline Setup — Create GitHub Actions workflow for automated test execution | 3.0 | Medium |
-| Credential Security Management — Token rotation, secrets storage, environment isolation | 2.0 | Low |
-| **Total Remaining** | **16.0** | |
+|----------|-------|----------|
+| Integration Test Environment Setup & Live API Validation | 0.5 | High |
+| Code Review & PR Merge | 0.5 | High |
+| Docstring Enhancement (`_get_metering_block()` Raises section) | 0.5 | Low |
+| **Total** | **1.5** | |
+
+### 2.3 Hours Integrity Verification
+
+- Section 2.1 Total (Completed): **3.5h**
+- Section 2.2 Total (Remaining): **1.5h**
+- Sum: 3.5 + 1.5 = **5.0h** = Total Project Hours in Section 1.2 ✓
+- Remaining hours (1.5h) matches Section 1.2, Section 2.2, and Section 7 ✓
 
 ---
 
 ## 3. Test Results
 
-| Test Category | Framework | Total Tests | Passed | Failed | Coverage % | Notes |
-|---|---|---|---|---|---|---|
-| Unit — Edge Cases & Boundary | pytest 9.0.2 | 100 | 100 | 0 | N/A | Validator, model, config, API client, and response structure unit tests |
-| Unit — Integration Skip Logic | pytest 9.0.2 | 2 | 2 | 0 | N/A | Verifies graceful skip behavior for missing credentials |
-| Integration — GET /runs/metering | pytest 9.0.2 | 9 | 0 | 0 | N/A | All 9 skipped — requires live API credentials (by design) |
-| Integration — GET /runs/metering/current | pytest 9.0.2 | 8 | 0 | 0 | N/A | All 8 skipped — requires live API credentials (by design) |
-| Integration — GET /project | pytest 9.0.2 | 9 | 0 | 0 | N/A | All 9 skipped — requires live API credentials (by design) |
-| Integration — Cross-API Consistency | pytest 9.0.2 | 7 | 0 | 0 | N/A | All 7 skipped — requires live API credentials (by design) |
-| Integration — Live Edge Cases | pytest 9.0.2 | 2 | 0 | 0 | N/A | 2 skipped — requires live API credentials (by design) |
-| **Totals** | | **137** | **102** | **0** | | **102 passed, 35 skipped, 0 failed** |
+All tests below originate from Blitzy's autonomous validation execution during this session.
 
-All test results originate from Blitzy's autonomous validation execution: `python -m pytest -v --tb=short --timeout=30` run in the project virtual environment. The 35 skipped integration tests are designed to skip gracefully with descriptive messages when `BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`, or `TEST_RUN_ID` environment variables are not set — this is intentional behavior per the AAP design specification.
+| Test Category | Framework | Total Tests | Passed | Failed | Skipped | Notes |
+|--------------|-----------|-------------|--------|--------|---------|-------|
+| Unit Tests (`test_edge_cases.py`) | pytest 9.0.3 | 104 | 102 | 0 | 2 | 2 tests skip due to missing API credentials; 102 pure unit tests pass |
+| Integration — `GET /project` (`test_project.py`) | pytest 9.0.3 | 9 | 0 | 0 | 9 | All skip — requires BASE_URL, API_TOKEN, TEST_PROJECT_ID |
+| Integration — `GET /runs/metering` (`test_runs_metering.py`) | pytest 9.0.3 | 9 | 0 | 0 | 9 | All skip — requires BASE_URL, API_TOKEN, TEST_PROJECT_ID |
+| Integration — `GET /runs/metering/current` (`test_runs_metering_current.py`) | pytest 9.0.3 | 8 | 0 | 0 | 8 | All skip — requires BASE_URL, API_TOKEN, TEST_PROJECT_ID |
+| Integration — Cross-API Consistency (`test_cross_api_consistency.py`) | pytest 9.0.3 | 7 | 0 | 0 | 7 | All skip — requires BASE_URL, API_TOKEN, TEST_PROJECT_ID |
+| Fix Verification (manual) | Python 3.12.3 | 10 | 10 | 0 | 0 | 7 non-dict types rejected + 3 valid dicts accepted |
+| Compilation Check | py_compile | 10 | 10 | 0 | 0 | All 10 source files (.py) compile without errors |
+| **Totals** | | **157** | **124** | **0** | **35** | 0 failures across all categories |
+
+**Autonomous Test Execution Summary**: `102 passed, 35 skipped in 0.14s` — zero failures. All 35 skipped tests are integration tests that require live API credentials, which is expected and documented behavior.
 
 ---
 
@@ -123,70 +112,68 @@ All test results originate from Blitzy's autonomous validation execution: `pytho
 
 ### Runtime Health
 
-- ✅ **Python environment**: Python 3.12.3 virtual environment operational with all 8 dependencies installed
-- ✅ **Module imports**: All 5 source modules (`config`, `api_client`, `validators`, `models`, `__init__`) import successfully
-- ✅ **Settings construction**: `Settings()` instantiates correctly, loads YAML config, applies defaults
-- ✅ **APIClient construction**: `APIClient(settings)` creates session with correct headers (Authorization, Content-Type, Accept)
-- ✅ **Pydantic model validation**: All 5 models (`MeteringData`, `MeteringResponse`, `CurrentMeteringResponse`, `ProjectMeteringBlock`, `ProjectResponse`) parse and validate correctly
-- ✅ **Validator functions**: `validate_percent_complete()`, `validate_field_presence()`, `get_percent_complete_value()`, `validate_response_structure()` all functional
-- ✅ **Compilation**: All 12 Python files pass `py_compile` with zero errors
-- ✅ **Linting**: Zero pycodestyle (PEP 8) violations with max-line-length=120
+- ✅ **Python environment**: Python 3.12.3, virtual environment active with all 8 dependencies installed
+- ✅ **Test suite execution**: Completes in 0.14s with no hangs, timeouts, or crashes
+- ✅ **Fix correctness**: `_get_metering_block({"metering": None})` now raises `AssertionError` with message `"must be a dict, got NoneType: None"`
+- ✅ **Fix correctness**: `_get_metering_block({"metering": "loading"})` now raises `AssertionError` with message `"must be a dict, got str: 'loading'"`
+- ✅ **Regression safety**: `_get_metering_block({"metering": {"percent_complete": 50.0}})` returns dict correctly — no regression
+- ✅ **Compilation**: All 10 Python source files pass `py_compile` — zero syntax errors
 
-### API Integration Verification
+### API Integration Status
 
-- ⚠️ **Live API connectivity**: Not verified — requires `BASE_URL` and `API_TOKEN` configuration
-- ⚠️ **GET /runs/metering response validation**: Pending live API access
-- ⚠️ **GET /runs/metering/current response validation**: Pending live API access
-- ⚠️ **GET /project response validation**: Pending live API access
+- ⚠ **GET /project**: 9 tests skip — requires `BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`
+- ⚠ **GET /runs/metering**: 9 tests skip — requires `BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`
+- ⚠ **GET /runs/metering/current**: 8 tests skip — requires `BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`
+- ⚠ **Cross-API Consistency**: 7 tests skip — requires all 4 environment variables
 
 ### UI Verification
 
-- N/A — This project is a backend API test suite with no user interface component. Manual QA verification instructions for browser DevTools Network Tab inspection are documented in `README.md` Section 8 and `docs/test_plan.md`.
+Not applicable — this project is a Python test suite with no web UI components.
 
 ---
 
 ## 5. Compliance & Quality Review
 
 | AAP Requirement | Deliverable | Status | Evidence |
-|---|---|---|---|
-| R-001 — Field Presence Validation | Tests in `test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py` | ✅ Implemented | `test_percent_complete_present_*` functions in each test module |
-| R-002 — Data Type Validation | Tests in all 3 endpoint suites + `test_edge_cases.py` | ✅ Implemented | `test_percent_complete_type_*` functions + parameterized invalid type tests |
-| R-003 — Value Range Validation | Tests in all 3 endpoint suites + `test_edge_cases.py` | ✅ Implemented | `test_percent_complete_range_*` functions + boundary value tests (0, 100) |
-| R-004 — Cross-API Consistency | `test_cross_api_consistency.py` (7 tests) | ✅ Implemented | `test_percent_complete_present_in_all_endpoints`, `test_percent_complete_value_logical_consistency` |
-| R-005 — Edge Case Coverage | `test_edge_cases.py` (102 tests) | ✅ Implemented | Boundary values, null handling, wrong types, field name mismatches, model validation |
-| IR-001 — API Client Infrastructure | `src/api_client.py` | ✅ Implemented | Session-based HTTP client with retry, timeout, and error propagation |
-| IR-002 — Authentication Handling | `src/api_client.py` + `src/config.py` | ✅ Implemented | Bearer token injection via `Authorization` header from env config |
-| IR-003 — Environment Configuration | `src/config.py`, `.env.example`, `config/settings.yaml` | ✅ Implemented | Multi-source config: env vars → .env file → YAML → defaults |
-| IR-004 — Test Data Prerequisites | `tests/conftest.py` | ✅ Implemented | Graceful `pytest.skip()` with descriptive messages when config missing |
-| IR-005 — Field Name Flexibility | `src/validators.py`, `src/models.py` | ✅ Implemented | Both `percent_complete` and `percentComplete` accepted via Pydantic aliases |
-| Assertion Specificity Rule | All test modules | ✅ Compliant | Every assertion includes endpoint, field, and actual-vs-expected context |
-| Test Isolation Rule | All test modules | ✅ Compliant | No module-level globals; shared state via fixtures only |
-| Environment Config Rule | All modules | ✅ Compliant | Zero hardcoded URLs, tokens, or project IDs |
-| Code Quality — PEP 8 | All 12 Python files | ✅ Zero violations | pycodestyle --max-line-length=120 returns clean |
-| Code Quality — Compilation | All 12 Python files | ✅ Zero errors | py_compile passes for all files |
-| Security — Token Masking | `src/config.py` | ✅ Implemented | `Settings.__repr__` masks `api_token` to prevent log leakage |
-| Security — CVE Documentation | `requirements.txt` | ✅ Documented | CVE-2025-71176 documented with CVSS score, mitigation, and tracking link |
+|----------------|-------------|--------|----------|
+| **0.4.1** — Add `isinstance(value, dict)` guard in `_get_metering_block()` | Modified `tests/test_project.py` lines 109–121 | ✅ Pass | Commit `28dd987`, diff shows 9-line guarded return replacing 3-line unconditional return |
+| **0.4.2** — No other lines in the file require modification | Only lines 109–121 changed | ✅ Pass | `git diff` shows changes confined to the `_get_metering_block()` function body only |
+| **0.5.1** — Total files affected: 1 | Only `tests/test_project.py` modified | ✅ Pass | `git diff --stat` shows 1 file changed |
+| **0.5.2** — All 13 explicitly excluded files remain unmodified | Zero changes to `src/`, `config/`, `docs/`, `conftest.py`, other test files | ✅ Pass | `git diff --name-only` lists only `tests/test_project.py` |
+| **0.6.1** — Full test suite: 102 passed, 35 skipped | Test execution matches baseline | ✅ Pass | `pytest -v` output: `102 passed, 35 skipped in 0.14s` |
+| **0.6.1** — None value raises AssertionError | `_get_metering_block({"metering": None})` → `AssertionError` | ✅ Pass | Manual verification output: `PASS: None value raises AssertionError` |
+| **0.6.1** — String value raises AssertionError | `_get_metering_block({"metering": "loading"})` → `AssertionError` | ✅ Pass | Manual verification output: `PASS: String value raises AssertionError` |
+| **0.6.1** — Valid dict returns correctly | `_get_metering_block({"metering": {"percent_complete": 50.0}})` → `dict` | ✅ Pass | Manual verification output: `PASS: Valid dict returned correctly` |
+| **0.6.1** — Edge case sweep: 7 non-dict types + 3 valid dicts | All 10 scenarios produce correct behavior | ✅ Pass | Sweep output: 7 × "correctly rejected", 3 × "valid dict accepted" |
+| **0.6.2** — Compilation check: `py_compile` on modified file | No syntax errors | ✅ Pass | Output: `Syntax OK` |
+| **0.7.1** — Assertion message follows `[GET /project]` prefix convention | Message format: `[GET /project] metering block under key '{key}' must be a dict, got {type}: {value}` | ✅ Pass | Code inspection confirms `f"[{_ENDPOINT}]"` prefix used |
+| **0.7.1** — Inline comment explains the "why" | 4-line comment block explains the guard's purpose | ✅ Pass | Lines 111–114: explains prevention of TypeError/AttributeError |
+| **0.7.2** — Zero modifications outside bug fix | No refactoring, no feature additions, no test restructuring | ✅ Pass | Single-function, single-file change confirmed |
+| **0.7.2** — Existing redundant `isinstance` guards preserved | Lines 296, 334 guards remain intact | ✅ Pass | No changes to any caller functions |
+| **0.7.3** — No new dependencies | `requirements.txt` unchanged | ✅ Pass | File shows UNCHANGED status |
 
-**Autonomous Validation Fixes Applied:**
-- Resolved merge conflict in `README.md` (blitzy branch vs. main branch)
-- Removed unused imports (`typing.Any` in `models.py`, unused variable in `test_runs_metering.py`)
-- Added defensive guards and improved type safety across source modules
-- Masked `api_token` in `Settings` representation for security
+### Autonomous Validation Fixes Applied
+
+| Fix | File | Description |
+|-----|------|-------------|
+| Type guard assertion | `tests/test_project.py:109-121` | Added `isinstance(value, dict)` check before returning metering block value; prevents `TypeError`/`AttributeError` propagation to callers |
+
+### Outstanding Quality Items
+
+| Item | Priority | Description |
+|------|----------|-------------|
+| Docstring gap | Low | `_get_metering_block()` Raises section (lines 102–107) does not document the new `AssertionError` for non-dict metering values |
 
 ---
 
 ## 6. Risk Assessment
 
 | Risk | Category | Severity | Probability | Mitigation | Status |
-|---|---|---|---|---|---|
-| Integration tests unvalidated against live API | Technical | High | High | Configure API credentials and execute 35 integration tests; design supports graceful skip in CI until credentials available | Open |
-| API response format differs from documented contracts | Integration | High | Medium | Models use `extra="allow"` for forward compatibility; validators check both field name conventions; fix tests post-discovery | Open |
-| API token expiration during test execution | Security | Medium | Medium | Implement token refresh logic or document rotation schedule; current design propagates auth errors transparently | Open |
-| CVE-2025-71176 in pytest (temp dir symlink attack) | Security | Low | Low | Documented in requirements.txt; mitigate via `PYTEST_DEBUG_TEMPROOT` env var or containerized execution | Mitigated |
-| Network latency causes test timeouts | Operational | Medium | Low | Default 30s timeout configured in pytest.ini; individual tests can override via `@pytest.mark.timeout()` | Mitigated |
-| No active in-progress run available for current metering tests | Integration | Medium | Medium | Tests marked `@pytest.mark.requires_active_run` skip gracefully; dedicated test project with seeded runs recommended | Open |
-| Field naming convention changes in future API versions | Technical | Low | Low | Configurable field names via `config/settings.yaml`; validators accept both conventions | Mitigated |
-| Missing CI/CD pipeline for automated execution | Operational | Medium | High | Tests designed to be CI-compatible; GitHub Actions workflow creation is a remaining task | Open |
+|------|----------|----------|-------------|------------|--------|
+| Fix unverified against live API — `_get_metering_block()` guard tested only with synthetic data, not actual API responses | Integration | Medium | Low | Configure `.env` with real credentials and run 35 integration tests | Open |
+| CVE-2025-71176 in pytest ≤9.0.2 — predictable `/tmp/pytest-of-{user}` paths allow local symlink attacks | Security | Medium | Low | Set `PYTEST_DEBUG_TEMPROOT` to a secure, user-private directory or run tests in isolated containers (noted in `requirements.txt`) | Mitigated |
+| Integration tests require periodic API token rotation | Operational | Low | Medium | Document token refresh procedure; use environment-specific credential management | Open |
+| 35 integration tests permanently skipped in CI if credentials not configured | Technical | Low | High | Add CI/CD pipeline step for credential injection via secrets manager | Open |
 
 ---
 
@@ -194,14 +181,13 @@ All test results originate from Blitzy's autonomous validation execution: `pytho
 
 ```mermaid
 pie title Project Hours Breakdown
-    "Completed Work" : 67
-    "Remaining Work" : 16
+    "Completed Work" : 3.5
+    "Remaining Work" : 1.5
 ```
 
-**Hours Summary:**
-- Completed Work: 67 hours (80.7%)
-- Remaining Work: 16 hours (19.3%)
-- Total: 83 hours
+**Completed Work: 3.5 hours (70.0%)** — Root cause analysis, bug fix implementation, fix verification, edge case sweep, regression testing, and compilation checks.
+
+**Remaining Work: 1.5 hours (30.0%)** — Integration test environment setup (0.5h), code review & PR merge (0.5h), docstring enhancement (0.5h).
 
 ---
 
@@ -209,131 +195,140 @@ pie title Project Hours Breakdown
 
 ### Achievement Summary
 
-The project has achieved **80.7% completion** (67 hours completed out of 83 total hours). All 19 AAP-specified file deliverables have been created and validated, covering the complete test infrastructure from project configuration through comprehensive test suites. The implementation addresses all five explicit requirements (R-001 through R-005) and all five implicit requirements (IR-001 through IR-005) with 7,462 lines of production-quality code across 21 files. The autonomous validation confirmed zero compilation errors, zero test failures (102/102 unit tests passing), and zero PEP 8 violations.
+The bug fix is **fully implemented, verified, and committed**. The project is **70.0% complete** (3.5 completed hours out of 5.0 total hours). All AAP-specified deliverables — the `isinstance(value, dict)` type guard in `_get_metering_block()`, the three core verification scenarios, the edge case sweep, the regression test suite, and the compilation check — have been successfully delivered. The fix is minimal (11 insertions, 1 deletion in a single file), surgically targeted, and produces zero regressions.
 
 ### Remaining Gaps
 
-The 16 remaining hours represent operational setup tasks that require human intervention — specifically, provisioning live API credentials, executing integration tests against the Blitzy Platform API, analyzing results, and establishing CI/CD automation. These items were either explicitly out of AAP scope (CI/CD) or inherently require human access provisioning (API credentials).
+The remaining 1.5 hours (30.0%) consist entirely of **path-to-production** activities that require human intervention:
+1. **Integration test validation** (0.5h): Configuring live API credentials and running the 35 skipped integration tests to confirm the fix works against the real Blitzy Platform API
+2. **Code review and merge** (0.5h): Human review of the 11-line diff and PR approval
+3. **Docstring enhancement** (0.5h): Updating the `_get_metering_block()` Raises section to document the new type-check AssertionError condition
 
 ### Critical Path to Production
 
-1. **Credential provisioning** (3h) — Blocking all integration test execution
-2. **Integration test validation** (4h) — Validates the test suite against real API responses
-3. **Defect resolution** (4h) — Address any field contract discrepancies discovered during live testing
-4. **CI/CD pipeline** (3h) — Enables automated, ongoing test execution
+1. Configure `.env` with `BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`, `TEST_RUN_ID`
+2. Run `CI=true python -m pytest -v --tb=short --timeout=30` — all 137 tests should pass
+3. Review and merge PR
+4. Optionally update docstring for completeness
 
 ### Production Readiness Assessment
 
-The test suite codebase is production-ready with enterprise-grade code quality. The codebase compiles cleanly, passes all executable tests, follows PEP 8 standards, includes comprehensive documentation, and implements security best practices. The remaining 19.3% of work is operational setup that requires human access to the Blitzy Platform API — no code-level changes are anticipated unless live API responses reveal contract discrepancies.
+The fix is **production-ready** from a code quality perspective. The single remaining blocker is the integration test verification with live API credentials, which is a standard operational step that cannot be performed by autonomous agents.
 
 ---
 
 ## 9. Development Guide
 
-### 9.1 System Prerequisites
+### System Prerequisites
 
-| Prerequisite | Version | Purpose |
-|---|---|---|
-| Python | 3.10+ (tested with 3.12.3) | Runtime for test suite execution |
-| pip | 20.0+ | Package installation |
-| Git | 2.0+ | Repository management |
-| Access to Blitzy Platform API | N/A | Required for integration test execution |
+| Software | Required Version | Verified Version |
+|----------|-----------------|-----------------|
+| Python | 3.10+ | 3.12.3 |
+| pip | Latest | Bundled with Python 3.12.3 |
+| Git | Any modern version | Available |
 
-### 9.2 Environment Setup
+### Environment Setup
 
 ```bash
-# 1. Clone the repository
+# 1. Clone the repository and switch to the fix branch
 git clone <repository-url>
-cd 6thaprilone
+cd <repository-root>
+git checkout blitzy-cea8a5e8-9281-44b9-b7c1-1500e171d0d6
 
-# 2. Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# venv\Scripts\activate   # Windows
+# 2. Create and activate a Python virtual environment
+python3 -m venv venv
+source venv/bin/activate   # Linux/macOS
+# venv\Scripts\activate    # Windows
 
 # 3. Install dependencies
 pip install -r requirements.txt
+```
 
-# 4. Configure environment variables
+**Expected output for step 3**: All 8 packages install successfully (pytest, requests, jsonschema, pydantic, python-dotenv, pyyaml, pytest-html, pytest-timeout).
+
+### Environment Variable Configuration
+
+```bash
+# 4. Copy the environment template and configure credentials
 cp .env.example .env
-# Edit .env with your actual values:
-#   BASE_URL=https://api.blitzy.com
-#   API_TOKEN=your_bearer_token_here
-#   TEST_PROJECT_ID=your_project_id
-#   TEST_RUN_ID=your_run_id
+
+# 5. Edit .env with your actual values:
+#    BASE_URL=https://api.blitzy.com    (Blitzy Platform API base URL, no trailing slash)
+#    API_TOKEN=<your-bearer-token>       (from Blitzy Platform dashboard)
+#    TEST_PROJECT_ID=<project-id>        (project with existing code generation runs)
+#    TEST_RUN_ID=<run-id>                (specific run ID within the test project)
+#    TEST_TIMEOUT=30                     (optional, default: 30)
+#    LOG_LEVEL=INFO                      (optional, default: INFO)
 ```
 
-### 9.3 Dependency Installation Verification
+### Running Tests
 
 ```bash
-# Verify all packages are installed
-pip list | grep -E "pytest|requests|jsonschema|pydantic|python-dotenv|PyYAML|pytest-html|pytest-timeout"
+# 6. Run the full test suite (unit tests only — no credentials needed)
+source venv/bin/activate
+CI=true python -m pytest -v --tb=short --timeout=30 --no-header
 
-# Expected output (versions may vary):
-# jsonschema          4.26.0
-# pydantic            2.12.5
-# pytest              9.0.2
-# pytest-html         4.2.0
-# pytest-timeout      2.4.0
-# python-dotenv       1.2.2
-# PyYAML              6.0.3
-# requests            2.33.1
+# Expected output: 102 passed, 35 skipped in ~0.14s
+# (35 integration tests skip until .env is configured)
+
+# 7. Run with credentials configured (all 137 tests)
+# After configuring .env with real API credentials:
+CI=true python -m pytest -v --tb=short --timeout=30 --no-header
+
+# Expected output: 137 passed in <30s
 ```
 
-### 9.4 Running Tests
+### Verifying the Bug Fix
 
 ```bash
-# Run full test suite (unit tests will pass; integration tests skip without credentials)
-python -m pytest -v --tb=short --timeout=30
+# 8. Verify the fix handles non-dict metering values correctly
+source venv/bin/activate
+python3 -c "
+from tests.test_project import _get_metering_block
 
-# Run only unit/edge case tests (no API credentials needed)
-python -m pytest tests/test_edge_cases.py -v
+# Test 1: None should raise AssertionError
+try:
+    _get_metering_block({'metering': None})
+    print('FAIL: No exception raised')
+except AssertionError as e:
+    print('PASS: None raises AssertionError')
 
-# Run specific endpoint tests
-python -m pytest tests/test_runs_metering.py -v
-python -m pytest tests/test_runs_metering_current.py -v
-python -m pytest tests/test_project.py -v
+# Test 2: String should raise AssertionError
+try:
+    _get_metering_block({'metering': 'loading'})
+    print('FAIL: No exception raised')
+except AssertionError as e:
+    print('PASS: String raises AssertionError')
 
-# Run cross-API consistency tests
-python -m pytest tests/test_cross_api_consistency.py -v
-
-# Run tests by marker
-python -m pytest -m "edge_cases" -v
-python -m pytest -m "runs_metering" -v
-python -m pytest -m "not requires_active_run" -v
-
-# Generate HTML report
-python -m pytest --html=report.html --self-contained-html -v
+# Test 3: Valid dict should work
+result = _get_metering_block({'metering': {'percent_complete': 50.0}})
+assert result == {'percent_complete': 50.0}
+print('PASS: Valid dict returned correctly')
+"
+# Expected: Three PASS lines
 ```
 
-### 9.5 Verification Steps
+### Compilation Check
 
 ```bash
-# Verify Python modules import correctly
-python -c "from src.config import Settings; print('Settings OK')"
-python -c "from src.api_client import APIClient; print('APIClient OK')"
-python -c "from src.validators import validate_percent_complete; print('Validators OK')"
-python -c "from src.models import MeteringData, ProjectResponse; print('Models OK')"
-
-# Verify compilation (should produce no output)
-python -m py_compile src/config.py
-python -m py_compile src/api_client.py
-python -m py_compile src/validators.py
-python -m py_compile src/models.py
-
-# Verify linting (should produce no output)
-python -m pycodestyle --max-line-length=120 src/ tests/
+# 9. Verify all source files compile without errors
+for f in src/config.py src/api_client.py src/validators.py src/models.py \
+         tests/conftest.py tests/test_project.py tests/test_runs_metering.py \
+         tests/test_runs_metering_current.py tests/test_cross_api_consistency.py \
+         tests/test_edge_cases.py; do
+    python3 -m py_compile "$f" && echo "OK: $f"
+done
+# Expected: 10 lines of "OK: <filename>"
 ```
 
-### 9.6 Troubleshooting
+### Troubleshooting
 
 | Issue | Cause | Resolution |
-|---|---|---|
-| `ModuleNotFoundError: No module named 'src'` | Running pytest from wrong directory | Ensure you run from the repository root directory |
-| All integration tests show SKIPPED | Missing `.env` configuration | Copy `.env.example` to `.env` and fill in API credentials |
-| `requests.exceptions.ConnectionError` | Invalid BASE_URL or network issue | Verify BASE_URL is correct and accessible from your network |
-| `401 Unauthorized` responses | Invalid or expired API_TOKEN | Obtain a fresh bearer token from Blitzy Platform dashboard |
-| CVE-2025-71176 security warning | Known pytest vulnerability | Set `PYTEST_DEBUG_TEMPROOT="$HOME/.pytest_tmp"` or run in containers |
+|-------|-------|------------|
+| `ModuleNotFoundError: No module named 'src'` | Virtual environment not activated or dependencies not installed | Run `source venv/bin/activate && pip install -r requirements.txt` |
+| All 35 integration tests SKIPPED | `.env` file missing or credentials not set | Copy `.env.example` to `.env` and fill in `BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`, `TEST_RUN_ID` |
+| `TypeError: argument of type 'NoneType' is not iterable` | Fix not applied — using pre-fix branch | Ensure you are on branch `blitzy-cea8a5e8-9281-44b9-b7c1-1500e171d0d6` with commit `28dd987` |
+| pytest CVE-2025-71176 warning | Known vulnerability in pytest temp directory handling | Set `export PYTEST_DEBUG_TEMPROOT="$HOME/.pytest_tmp"` or run tests in isolated containers |
 
 ---
 
@@ -342,110 +337,70 @@ python -m pycodestyle --max-line-length=120 src/ tests/
 ### A. Command Reference
 
 | Command | Purpose |
-|---|---|
-| `python -m pytest -v --tb=short --timeout=30` | Run full test suite with verbose output |
-| `python -m pytest tests/test_edge_cases.py -v` | Run edge case tests only (no API needed) |
-| `python -m pytest -m "edge_cases" -v` | Run tests by marker |
+|---------|---------|
+| `source venv/bin/activate` | Activate Python virtual environment |
+| `pip install -r requirements.txt` | Install all project dependencies |
+| `CI=true python -m pytest -v --tb=short --timeout=30 --no-header` | Run full test suite (non-interactive) |
+| `python -m pytest -m project -v` | Run only `GET /project` endpoint tests |
+| `python -m pytest -m edge_cases -v` | Run only edge case / unit tests |
+| `python -m pytest -m cross_api -v` | Run only cross-API consistency tests |
 | `python -m pytest --html=report.html --self-contained-html` | Generate HTML test report |
-| `python -m pytest -m "not requires_active_run" -v` | Skip tests requiring active runs |
-| `pip install -r requirements.txt` | Install all dependencies |
-| `python -m pycodestyle --max-line-length=120 src/ tests/` | Run PEP 8 linting |
-| `python -m py_compile <file>` | Verify Python file compiles |
+| `python3 -m py_compile <file>` | Check Python file for syntax errors |
 
 ### B. Port Reference
 
-No ports are used by this project. The test suite makes outbound HTTP requests to the Blitzy Platform API configured via `BASE_URL` environment variable. No local servers are started.
+No network ports are used — this is a test suite executed locally against a remote API configured via `BASE_URL`.
 
 ### C. Key File Locations
 
 | File | Purpose |
-|---|---|
-| `src/config.py` | Configuration management (Settings class) |
-| `src/api_client.py` | HTTP client for three API endpoints |
-| `src/validators.py` | Field validation utilities |
-| `src/models.py` | Pydantic response models |
-| `tests/conftest.py` | Shared pytest fixtures |
-| `tests/test_runs_metering.py` | GET /runs/metering tests |
-| `tests/test_runs_metering_current.py` | GET /runs/metering/current tests |
-| `tests/test_project.py` | GET /project tests |
-| `tests/test_cross_api_consistency.py` | Cross-API consistency tests |
-| `tests/test_edge_cases.py` | Edge case and boundary tests |
-| `config/settings.yaml` | Endpoint paths and field config |
-| `.env.example` | Environment variable template |
-| `pytest.ini` | Pytest framework configuration |
-| `docs/test_plan.md` | Formal test plan document |
-| `docs/api_contracts.md` | API response contract specs |
+|------|---------|
+| `tests/test_project.py` | **Modified file** — Contains `_get_metering_block()` with the bug fix (lines 109–121) |
+| `src/validators.py` | Validation functions for `percent_complete` field (downstream consumer of metering block) |
+| `src/api_client.py` | Authenticated HTTP client with retry logic for 3 Blitzy Platform API endpoints |
+| `src/config.py` | Settings management — merges `.env` and `config/settings.yaml` |
+| `src/models.py` | Pydantic v2 response models for API endpoint validation |
+| `tests/conftest.py` | Shared pytest fixtures (`api_client`, `test_project_id`, etc.) |
+| `tests/test_edge_cases.py` | 104 unit tests for edge cases and validators |
+| `config/settings.yaml` | Externalized configuration (endpoint paths, field names, validation constraints) |
+| `.env.example` | Environment variable template with all required/optional variables |
+| `pytest.ini` | Pytest configuration (markers, timeouts, output formatting) |
+| `requirements.txt` | PyPI dependency manifest (8 packages) |
 
 ### D. Technology Versions
 
 | Technology | Version | Purpose |
-|---|---|---|
+|-----------|---------|---------|
 | Python | 3.12.3 | Runtime |
-| pytest | 9.0.2 | Test framework |
+| pytest | 9.0.3 | Test framework |
 | requests | 2.33.1 | HTTP client |
 | jsonschema | 4.26.0 | JSON schema validation |
-| pydantic | 2.12.5 | Data validation and models |
+| pydantic | 2.12.5 | Data validation / response models |
 | python-dotenv | 1.2.2 | Environment variable loading |
-| pytest-html | 4.2.0 | HTML report generation |
-| pytest-timeout | 2.4.0 | Test timeout enforcement |
 | PyYAML | 6.0.3 | YAML configuration parsing |
+| pytest-html | 4.2.0 | HTML report generation |
+| pytest-timeout | 2.4.0 | Test execution timeout enforcement |
 
 ### E. Environment Variable Reference
 
 | Variable | Required | Default | Description |
-|---|---|---|---|
-| `BASE_URL` | Yes | (empty) | Blitzy Platform API base URL (e.g., `https://api.blitzy.com`) |
-| `API_TOKEN` | Yes | (empty) | Bearer authentication token for API access |
-| `TEST_PROJECT_ID` | Yes | (empty) | Project ID with existing code generation runs |
-| `TEST_RUN_ID` | Yes | (empty) | Specific run ID for targeted metering tests |
-| `TEST_TIMEOUT` | No | 30 | HTTP request timeout in seconds |
-| `LOG_LEVEL` | No | INFO | Log verbosity (DEBUG, INFO, WARNING, ERROR) |
-| `PYTEST_DEBUG_TEMPROOT` | No | (system default) | Secure temp directory for pytest (CVE-2025-71176 mitigation) |
-
-### F. Developer Tools Guide
-
-**Running a Quick Smoke Test (No API Credentials Needed):**
-```bash
-source venv/bin/activate
-python -m pytest tests/test_edge_cases.py -v --timeout=30
-# Expected: 100+ tests pass in < 1 second
-```
-
-**Validating a Single Validator Function:**
-```bash
-python -c "
-from src.validators import validate_percent_complete
-validate_percent_complete(50.0, 'test')     # Should pass silently
-validate_percent_complete(None, 'test')     # Should pass silently
-validate_percent_complete(0, 'test')        # Should pass silently
-validate_percent_complete(100.0, 'test')    # Should pass silently
-print('All validations passed')
-"
-```
-
-**Testing Pydantic Model Parsing:**
-```bash
-python -c "
-from src.models import MeteringData, ProjectResponse
-m = MeteringData.model_validate({'percent_complete': 42.5})
-print(f'MeteringData: {m.percent_complete}')
-p = ProjectResponse.model_validate({
-    'id': 'proj-1', 'name': 'Test',
-    'metering': {'percent_complete': 99.9}
-})
-print(f'ProjectResponse metering: {p.metering.percent_complete}')
-"
-```
+|----------|----------|---------|-------------|
+| `BASE_URL` | Yes | — | Blitzy Platform API base URL (no trailing slash) |
+| `API_TOKEN` | Yes | — | Bearer token for API authentication |
+| `TEST_PROJECT_ID` | Yes | — | Project ID with existing code generation runs |
+| `TEST_RUN_ID` | Yes | — | Specific run ID for targeted metering tests |
+| `TEST_TIMEOUT` | No | `30` | Per-test timeout in seconds |
+| `LOG_LEVEL` | No | `INFO` | Log verbosity (DEBUG, INFO, WARNING, ERROR) |
+| `PYTEST_DEBUG_TEMPROOT` | No | `/tmp/pytest-of-{user}` | Secure temp directory (mitigates CVE-2025-71176) |
 
 ### G. Glossary
 
 | Term | Definition |
-|---|---|
-| `percent_complete` | A numeric field (0.0–100.0 or null) representing code generation run progress |
-| `percentComplete` | camelCase alias for `percent_complete`; both naming conventions are valid |
-| Metering | The system that tracks resource usage and progress of code generation runs |
-| Code Generation Run | A single execution of the Blitzy code generation pipeline for a project |
-| Pub/Sub | Google Cloud Pub/Sub messaging service used to propagate run progress updates |
-| Bearer Token | HTTP authentication mechanism using `Authorization: Bearer <token>` header |
-| Pydantic | Python data validation library used for response model definitions |
-| pytest | Python testing framework used for test organization and execution |
+|------|-----------|
+| Metering block | Nested JSON sub-object within `GET /project` responses containing `percent_complete` and related fields |
+| `_get_metering_block()` | Helper function in `tests/test_project.py` that extracts the metering block from API responses |
+| `percent_complete` / `percentComplete` | Progress field (0.0–100.0 or null) indicating code generation completion percentage |
+| `METERING_BLOCK_KEY_NAMES` | List of accepted key variants for the metering block: `metering`, `meteringData`, `metering_data` |
+| Type guard | An `isinstance()` assertion that validates a value's type before downstream use |
+| Integration tests | Tests requiring live API access (35 tests across 4 files); skip when credentials are absent |
+| Unit tests | Self-contained tests using mock/synthetic data (102 tests); run without API access |
