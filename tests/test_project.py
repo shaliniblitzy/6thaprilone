@@ -108,7 +108,17 @@ def _get_metering_block(response_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     for key_name in METERING_BLOCK_KEY_NAMES:
         if key_name in response_data:
-            return response_data[key_name]
+            # Guard: ensure the value under the metering key is a dict.
+            # Without this check, None or non-dict values propagate to
+            # callers, causing TypeError/AttributeError instead of
+            # descriptive AssertionError messages.
+            value = response_data[key_name]
+            assert isinstance(value, dict), (
+                f"[{_ENDPOINT}] metering block under key "
+                f"'{key_name}' must be a dict, "
+                f"got {type(value).__name__}: {value!r}"
+            )
+            return value
 
     available_keys = sorted(response_data.keys())
     raise AssertionError(
