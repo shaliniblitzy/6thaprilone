@@ -2,458 +2,458 @@
 
 # 0. Agent Action Plan
 
-## 0.1 Intent Clarification
+## 0.1 Executive Summary
 
-### 0.1.1 Core Feature Objective
+Based on the bug description, the Blitzy platform understands that the bug is a **missing type-safety guard in the `_get_metering_block()` helper function** within `tests/test_project.py` of the Blitzy Platform API Test Suite. This function extracts the nested metering data object from `GET /project` API responses but returns the raw value at the metering key without validating that it is a `dict`. When the Blitzy Platform API returns a response where the metering key exists but its value is `None` (JSON `null`) or a non-dict type (e.g., a string), the function returns that non-dict value to its callers, causing downstream test functions to crash with unhelpful `TypeError` or `AttributeError` exceptions instead of clean, descriptive `AssertionError` messages.
 
-Based on the prompt, the Blitzy platform understands that the new feature requirement is to **add automated API response test coverage** that verifies the presence, type, and value constraints of a newly introduced `percent_complete` (or `percentComplete`) field across three existing Blitzy Platform API endpoints related to code generation run metering and project data.
+The user's requirement specifies verifying that three existing Blitzy Platform API endpoints — `GET /runs/metering`, `GET /runs/metering/current`, and `GET /project` — include a `percent_complete` (or `percentComplete`) field with a numeric value between `0.0` and `100.0`, or `null`. The test suite at `tests/test_project.py` is the validation layer for the `GET /project` endpoint, and the `_get_metering_block()` function is the critical extraction point where the nested metering block is located before field-level validation proceeds. The bug manifests when the API returns a structurally unexpected metering block (specifically `null`), causing two of seven `GET /project` tests to produce undiagnosable `TypeError` crashes rather than actionable test failure messages.
 
-The specific feature requirements are:
+### 0.1.1 Technical Failure Classification
 
-- **Requirement R-001 — Field Presence Validation**: Verify that the `percent_complete` or `percentComplete` field is present in the JSON response payload of all three target API endpoints: `GET /runs/metering`, `GET /runs/metering/current`, and `GET /project` (with inline metering data)
-- **Requirement R-002 — Data Type Validation**: Confirm that the field value is either a numeric type (`float` or `int`) or explicitly `null` — never a string, boolean, or other non-numeric type
-- **Requirement R-003 — Value Range Validation**: Assert that when the field value is not `null`, it falls within the inclusive range of `0.0` to `100.0`
-- **Requirement R-004 — Cross-API Consistency**: Ensure the field is consistently present across all three APIs — if present in one API but missing in another, flag this as a defect
-- **Requirement R-005 — Edge Case Coverage**: Validate negative scenarios including values exceeding 100, values below 0, wrong data types, and field name mismatches between `percent_complete` and `percentComplete`
+- **Error Type**: Missing input validation / type-safety guard in test helper function
+- **Failure Mode**: `TypeError: argument of type 'NoneType' is not iterable` and `AttributeError: 'str' object has no attribute 'keys'`
+- **Affected Component**: `tests/test_project.py`, function `_get_metering_block()` at lines 85–118
+- **Affected Tests**: `test_percent_complete_present_in_project_metering` (line 185) and `test_percent_complete_not_at_top_level` (line 216)
+- **Severity**: Medium — causes confusing test output that obscures real API defects, violating the suite's design principle of descriptive failure messages
 
-Implicit requirements detected:
+### 0.1.2 Reproduction Summary
 
-- **IR-001 — API Client Infrastructure**: Since the repository is currently empty (greenfield), a complete HTTP client and test execution framework must be established from scratch
-- **IR-002 — Authentication Handling**: The Blitzy Platform APIs likely require authentication (bearer tokens or API keys) which the test infrastructure must support
-- **IR-003 — Environment Configuration**: Tests must support multiple deployment environments (development, staging) via configurable base URLs
-- **IR-004 — Test Data Prerequisites**: Tests require existing project IDs and active code generation runs to trigger the target API responses
-- **IR-005 — Field Name Flexibility**: The tests must account for both `percent_complete` (snake_case) and `percentComplete` (camelCase) naming conventions, as the exact naming may vary per API endpoint
+The bug can be reproduced by passing a response dictionary where the metering key exists but its value is not a `dict`:
 
-### 0.1.2 Special Instructions and Constraints
+- `_get_metering_block({"metering": None})` returns `None` instead of raising an `AssertionError`
+- `_get_metering_block({"metering": "loading"})` returns `"loading"` instead of raising an `AssertionError`
+- Subsequent calls to `validate_field_presence(None, ...)` crash with `TypeError`
+- Subsequent calls to `any(field in None for field in ...)` crash with `TypeError`
 
-- **Scope Constraint**: This feature is specifically scoped to code generation project runs — the `percent_complete` field is expected only in the context of code generation metering, not general platform operations
-- **API Context**: These are existing platform APIs that have been recently extended to include the new field — the tests verify a backend change, not a new endpoint
-- **Trigger Awareness**: The APIs are not always called automatically; specific user actions (opening a project, starting a run, refreshing the dashboard) trigger these calls — tests must account for this by ensuring appropriate preconditions
-- **Network Inspection Guidance**: The user provided detailed browser DevTools network tab inspection instructions, indicating these tests bridge both automated API testing and manual QA verification workflows
+## 0.2 Root Cause Identification
 
-User Example — Expected API Response Patterns:
-```
-GET /runs/metering?projectId=xxx → includes percent_complete field
-GET /runs/metering/current → includes percent_complete field (live run)
-GET /project?id=xxx → includes inline metering with percent_complete
-```
+Based on exhaustive repository analysis, THE root cause is: **the `_get_metering_block()` helper function in `tests/test_project.py` (lines 85–118) returns the raw value at a metering key without asserting that the value is a `dict`**, allowing `None`, strings, lists, and other non-dict types to propagate unchecked to downstream test assertions that assume dict-like behavior.
 
-User Example — Validation Matrix:
-| Scenario | Expected |
-|---|---|
-| Completed run | Value between 0–100 |
-| In-progress run | Likely less than 100 |
-| No data | `null` |
-| Field missing | Bug — test failure |
+### 0.2.1 Primary Root Cause — Missing Type Guard
 
-### 0.1.3 Technical Interpretation
-
-These feature requirements translate to the following technical implementation strategy:
-
-- To **establish the test infrastructure**, we will create a Python-based test project using `pytest` as the test framework and the `requests` library as the HTTP client, with `jsonschema` for response schema validation
-- To **validate field presence across all three APIs**, we will create parameterized test functions that invoke each endpoint and assert the existence of the `percent_complete`/`percentComplete` key in the response JSON
-- To **enforce value range constraints**, we will implement custom assertion helpers that verify numeric type and `0.0 ≤ value ≤ 100.0` range, with explicit `null` acceptance
-- To **test edge cases and negative scenarios**, we will create dedicated test modules that validate boundary conditions (exactly 0, exactly 100), invalid states (greater than 100, less than 0, wrong types), and cross-API consistency
-- To **support multiple environments**, we will implement a configuration layer using environment variables and pytest fixtures that inject configurable base URLs, authentication credentials, and project identifiers
-- To **document test procedures**, we will create comprehensive README documentation and inline docstrings that mirror the user's manual DevTools inspection workflow for QA team reference
-
-## 0.2 Repository Scope Discovery
-
-### 0.2.1 Comprehensive File Analysis
-
-**Current Repository State**: The repository is a **greenfield project** containing only a single file:
-
-| File | Status | Content |
-|---|---|---|
-| `README.md` | UNCHANGED | Contains only `# 6thaprilone` — a placeholder heading with no project documentation |
-
-No existing source code, test files, configuration files, dependency manifests, build scripts, or CI/CD pipelines exist. The entire test infrastructure must be created from scratch.
-
-**Architectural Context from Tech Spec**: The broader Blitzy Platform system includes the `archie-job-reverse-document-generator` — a headless Cloud Run batch job with consumer-only integration posture. The three target APIs (`GET /runs/metering`, `GET /runs/metering/current`, `GET /project`) belong to the **upstream Blitzy Platform API layer** (likely the Admin Service or frontend-facing API gateway), not the reverse document generator itself. These APIs expose metering and project data that the batch job contributes to via Pub/Sub notifications containing fields like `estimated_hours_saved`, `estimated_lines_generated`, and now `percent_complete`.
-
-**Integration Point Discovery**:
-
-- **API Endpoints Connecting to Feature**:
-  - `GET /runs/metering` — Retrieves metering data for multiple runs; includes `percent_complete` per run record; triggered when viewing run history or fetching metering data with query parameter `projectId`
-  - `GET /runs/metering/current` — Returns metering data for the currently in-progress run; includes `percent_complete` reflecting live progress; triggered by live run status views and auto-refresh polling
-  - `GET /project` — Returns project details with inline metering data embedded; includes `percent_complete` within nested metering object; triggered on project page load with query parameter `id`
-
-- **Data Flow Path**: The `percent_complete` field originates from the code generation pipeline → propagates through Pub/Sub `IN_PROGRESS` notifications → gets stored by the platform's data layer → surfaces through the three target REST APIs
-
-- **No Database Models or Migrations Affected**: This test project does not modify any database schema — it only reads API responses
-
-- **No Service Classes or Middleware Impacted**: This is a standalone test project with no production service modifications
-
-### 0.2.2 Web Search Research Conducted
-
-Research was conducted on the following topics to inform the implementation approach:
-
-- **Best practices for pytest-based API response field validation** — Confirmed that `pytest` with `requests` library is the standard approach for Python API testing, using fixtures for setup and parameterized tests for coverage breadth
-- **JSON schema validation for API testing** — Identified `jsonschema` as the standard library for validating API response structures against predefined schemas
-- **API test project structure patterns** — Established the standard directory layout: `tests/` for test modules, `conftest.py` for shared fixtures, `config/` for environment settings
-- **Edge case testing strategies for numeric API fields** — Confirmed boundary value analysis (0, 100, null) and negative testing (out-of-range, wrong type) as standard validation patterns
-
-### 0.2.3 New File Requirements
-
-**New Source Files to Create**:
-
-- `src/api_client.py` — HTTP client wrapper encapsulating authentication, base URL configuration, and request methods for all three target endpoints
-- `src/config.py` — Configuration management module reading environment variables for base URL, API keys, project IDs, and test timeouts
-- `src/validators.py` — Custom validation utilities implementing `percent_complete` field presence, type, and range checks with descriptive error messages
-- `src/models.py` — Pydantic-based response models defining the expected schema for metering and project API responses, including the `percent_complete` field
-
-**New Test Files to Create**:
-
-- `tests/conftest.py` — Shared pytest fixtures providing API client instances, authentication tokens, test project IDs, and run IDs
-- `tests/test_runs_metering.py` — Test suite for `GET /runs/metering` endpoint validating `percent_complete` field presence, type, value range, and edge cases
-- `tests/test_runs_metering_current.py` — Test suite for `GET /runs/metering/current` endpoint with identical validation logic plus live-run-specific assertions
-- `tests/test_project.py` — Test suite for `GET /project` endpoint validating `percent_complete` within the inline metering data structure
-- `tests/test_cross_api_consistency.py` — Cross-cutting test suite verifying that the `percent_complete` field behavior is consistent across all three endpoints
-- `tests/test_edge_cases.py` — Dedicated edge case and boundary condition tests covering out-of-range values, null handling, type mismatches, and field name conventions
-
-**New Configuration Files to Create**:
-
-- `pytest.ini` — Pytest configuration defining test discovery patterns, markers, timeout settings, and output formatting
-- `requirements.txt` — Project dependency manifest listing all required packages with pinned versions
-- `.env.example` — Template environment variable file documenting all required configuration for running the test suite
-- `config/settings.yaml` — Feature-specific configuration defining default test parameters, API endpoint paths, and expected field names
-
-**New Documentation Files to Create**:
-
-- `README.md` — Complete project documentation covering purpose, setup, configuration, execution, and manual QA verification reference (replacing the current placeholder)
-- `docs/test_plan.md` — Detailed test plan document mapping each requirement to specific test cases with expected outcomes
-- `docs/api_contracts.md` — API response contract documentation defining the expected JSON structure for each endpoint including the `percent_complete` field
-
-## 0.3 Dependency Inventory
-
-### 0.3.1 Private and Public Packages
-
-Since the repository is greenfield with no existing dependency manifest, all packages listed below are new additions required to establish the API test infrastructure. Versions have been verified through web search for current stable releases as of April 2026.
-
-| Registry | Package | Version | Purpose |
-|---|---|---|---|
-| PyPI | `pytest` | `>=8.3.0` | Primary test framework for organizing, discovering, and executing API test cases |
-| PyPI | `requests` | `>=2.32.0` | HTTP client library for making GET requests to the three target API endpoints |
-| PyPI | `jsonschema` | `>=4.23.0` | JSON schema validation for asserting API response structures match expected contracts |
-| PyPI | `pydantic` | `>=2.9.0` | Data validation and response model definition for parsing API responses with type safety |
-| PyPI | `python-dotenv` | `>=1.0.0` | Environment variable loading from `.env` files for configurable test execution |
-| PyPI | `pytest-html` | `>=4.1.0` | HTML test report generation for QA team review and CI/CD artifact publishing |
-| PyPI | `pytest-timeout` | `>=2.3.0` | Test execution timeout enforcement preventing hung tests during API call failures |
-| PyPI | `pyyaml` | `>=6.0.0` | YAML configuration file parsing for feature-specific settings |
-
-**Platform Context**: The broader Blitzy Platform uses `blitzy-platform-shared==0.0.731` as its single dependency (housing LangGraph, LangChain, Pydantic, and all transitive libraries). This test project is **independent** of that shared package — it operates as a standalone API test suite that validates the platform's external API responses without importing any platform-internal modules.
-
-### 0.3.2 Dependency Updates
-
-Since this is a greenfield project with no existing dependencies, there are no import transformations or migration updates required. All dependency configuration is net-new.
-
-**Import Structure for New Files**:
-
-- `src/api_client.py` — Requires: `import requests`, `from src.config import Settings`
-- `src/config.py` — Requires: `from pydantic import BaseModel`, `from dotenv import load_dotenv`
-- `src/validators.py` — Requires: `from jsonschema import validate`
-- `src/models.py` — Requires: `from pydantic import BaseModel, Field`
-- `tests/conftest.py` — Requires: `import pytest`, `from src.api_client import APIClient`
-- `tests/test_*.py` — Requires: `import pytest`, `from src.validators import validate_percent_complete`
-
-**External Reference Configuration**:
-
-- `requirements.txt` — New file listing all packages above with version pins
-- `pytest.ini` — New file configuring pytest discovery, markers, and plugins
-- `.env.example` — New file documenting required environment variables:
-  - `BASE_URL` — Platform API base URL (e.g., `https://api.blitzy.com`)
-  - `API_TOKEN` — Authentication bearer token for API access
-  - `TEST_PROJECT_ID` — Project ID with existing code generation runs
-  - `TEST_RUN_ID` — Specific run ID for targeted metering tests
-- `config/settings.yaml` — New file defining endpoint paths and field name expectations
-
-## 0.4 Integration Analysis
-
-### 0.4.1 Existing Code Touchpoints
-
-**Direct Modifications Required**:
-
-- `README.md` — Replace the current placeholder content (`# 6thaprilone`) with comprehensive project documentation including purpose, setup instructions, test execution commands, and manual QA verification reference. This is the only existing file in the repository that requires modification.
-
-No other existing code touchpoints exist because the repository is greenfield. All other files listed below represent new creation points rather than modifications to existing code.
-
-### 0.4.2 Platform API Integration Points
-
-The test suite integrates with three existing Blitzy Platform API endpoints as external dependencies. Understanding how these endpoints relate to the broader platform data flow is critical for designing effective tests.
-
-**API Endpoint 1 — `GET /runs/metering`**:
-- **Purpose**: Retrieves metering data for multiple code generation runs associated with a project
-- **Query Parameters**: `projectId` (required) — identifies the target project
-- **Response Structure**: Array of run metering objects, each expected to contain the `percent_complete` field
-- **Trigger Context**: Called when viewing run history or fetching metering data for a project dashboard
-- **Data Origin**: The `percent_complete` value originates from the code generation pipeline's progress tracking, propagated through Pub/Sub `IN_PROGRESS` notifications containing `current_index` and `total_steps` fields, which the platform computes into a percentage
-
-**API Endpoint 2 — `GET /runs/metering/current`**:
-- **Purpose**: Returns metering data specifically for the currently active (in-progress) code generation run
-- **Query Parameters**: Contextual — may require project or run identification
-- **Response Structure**: Single metering object for the active run with `percent_complete` reflecting real-time progress
-- **Trigger Context**: Invoked during live run status views and auto-refresh polling intervals
-- **Data Origin**: Real-time computation from the active run's `current_index / total_steps` ratio, where total_steps corresponds to the document section count (indices 0–8 per tech spec scope)
-
-**API Endpoint 3 — `GET /project`**:
-- **Purpose**: Returns comprehensive project details with inline metering data embedded
-- **Query Parameters**: `id` (required) — identifies the target project
-- **Response Structure**: Project object containing a nested metering block that includes `percent_complete`
-- **Trigger Context**: Called on project page load and dashboard refresh
-- **Data Origin**: Aggregated from the most recent run's metering data, including `estimated_hours_saved`, `estimated_lines_generated`, and the new `percent_complete`
-
-### 0.4.3 Authentication and Authorization Dependencies
-
-- **Auth Mechanism**: Platform APIs are secured at the platform level (GCP IAM, VPC). Test execution requires valid authentication credentials (bearer token or API key) configured as environment variables
-- **Authorization Scope**: Tests must use credentials with sufficient permissions to read project data, run history, and metering metrics
-- **No Auth Modifications**: This test project does not modify any authentication or authorization configuration — it consumes existing auth mechanisms as a client
-
-### 0.4.4 Data Flow Diagram
-
-```mermaid
-graph LR
-    A[Code Gen Pipeline] -->|Pub/Sub IN_PROGRESS| B[Platform Data Layer]
-    A -->|current_index, total_steps| B
-    B -->|Computes percent_complete| C[Platform API Layer]
-    C --> D[GET /runs/metering]
-    C --> E[GET /runs/metering/current]
-    C --> F[GET /project]
-    G[Test Suite] -->|HTTP GET + Auth| D
-    G -->|HTTP GET + Auth| E
-    G -->|HTTP GET + Auth| F
-    G -->|Assert field presence, type, range| H[Test Results]
-```
-
-### 0.4.5 Test Precondition Dependencies
-
-Effective test execution depends on the following platform state conditions:
-
-| Precondition | Required For | Fallback Strategy |
-|---|---|---|
-| Existing project with code generation runs | `GET /runs/metering`, `GET /project` | Use a dedicated test project with seeded run history |
-| At least one completed run | Validating value between 0–100 | Verify against historical run data |
-| Active in-progress run | `GET /runs/metering/current` | Mark tests requiring live runs with `@pytest.mark.requires_active_run` skip marker |
-| Valid authentication credentials | All three endpoints | Fail fast with descriptive error if credentials are missing or expired |
-| Network access to platform API | All three endpoints | Tests are integration tests requiring live API access — no offline fallback |
-
-## 0.5 Technical Implementation
-
-### 0.5.1 File-by-File Execution Plan
-
-Every file listed below MUST be created or modified during implementation. Files are organized into execution groups reflecting logical build order.
-
-**Group 1 — Project Foundation and Configuration**:
-
-| Action | File | Purpose |
-|---|---|---|
-| MODIFY | `README.md` | Replace placeholder with complete project documentation including setup, execution, and QA reference |
-| CREATE | `requirements.txt` | Dependency manifest with pinned versions for all required packages |
-| CREATE | `.env.example` | Template environment variable file documenting `BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`, `TEST_RUN_ID` |
-| CREATE | `pytest.ini` | Pytest configuration: test discovery patterns, custom markers, timeout defaults, report output |
-| CREATE | `config/settings.yaml` | Endpoint path definitions, field name variants, and validation parameter defaults |
-
-**Group 2 — Core Source Modules**:
-
-| Action | File | Purpose |
-|---|---|---|
-| CREATE | `src/__init__.py` | Package initializer for the source module |
-| CREATE | `src/config.py` | Configuration management using `pydantic.BaseModel` and `python-dotenv` for environment-based settings |
-| CREATE | `src/api_client.py` | HTTP client class wrapping `requests` with methods for each of the three target endpoints, authentication header injection, and response parsing |
-| CREATE | `src/validators.py` | Validation functions: `validate_percent_complete(value)` checks type, range, and null acceptance; `validate_field_presence(response, field_names)` checks for either naming convention |
-| CREATE | `src/models.py` | Pydantic response models: `MeteringResponse`, `CurrentMeteringResponse`, `ProjectResponse` with `percent_complete` field typed as `Optional[float]` constrained to `ge=0.0, le=100.0` |
-
-**Group 3 — Test Infrastructure**:
-
-| Action | File | Purpose |
-|---|---|---|
-| CREATE | `tests/__init__.py` | Package initializer for test module |
-| CREATE | `tests/conftest.py` | Shared fixtures: `api_client` (authenticated client instance), `test_project_id` (from env), `test_run_id` (from env), `base_url` (from env) |
-
-**Group 4 — Endpoint-Specific Test Suites**:
-
-| Action | File | Purpose |
-|---|---|---|
-| CREATE | `tests/test_runs_metering.py` | Test `GET /runs/metering`: field presence, numeric type, range 0–100, null acceptance, field naming |
-| CREATE | `tests/test_runs_metering_current.py` | Test `GET /runs/metering/current`: field presence, live run value less than 100, null for no active run |
-| CREATE | `tests/test_project.py` | Test `GET /project`: field presence within nested metering block, type and range validation |
-
-**Group 5 — Cross-Cutting and Edge Case Tests**:
-
-| Action | File | Purpose |
-|---|---|---|
-| CREATE | `tests/test_cross_api_consistency.py` | Verify `percent_complete` is present in all three endpoints for the same project/run context |
-| CREATE | `tests/test_edge_cases.py` | Boundary conditions: exactly 0.0, exactly 100.0, null, negative values, values over 100, wrong types |
-
-**Group 6 — Documentation**:
-
-| Action | File | Purpose |
-|---|---|---|
-| CREATE | `docs/test_plan.md` | Test plan mapping each requirement (R-001 through R-005) to specific test functions with expected outcomes |
-| CREATE | `docs/api_contracts.md` | API response contract documentation with sample JSON structures for each endpoint |
-
-### 0.5.2 Implementation Approach per File
-
-**Phase A — Establish Foundation**: Begin by creating the configuration layer (`config/settings.yaml`, `src/config.py`, `.env.example`) and dependency manifest (`requirements.txt`). This ensures all subsequent modules have a consistent configuration source and all required packages are declared.
-
-**Phase B — Build API Client**: Create `src/api_client.py` as the central HTTP client with three methods — `get_runs_metering(project_id)`, `get_runs_metering_current()`, and `get_project(project_id)`. Each method injects the authentication bearer token, constructs the full URL from base configuration, and returns parsed JSON responses.
-
-**Phase C — Implement Validators and Models**: Create `src/validators.py` with the core validation function:
+- **Located in**: `tests/test_project.py`, lines 109–111
+- **Triggered by**: `GET /project` API responses where a recognized metering key (`metering`, `meteringData`, or `metering_data`) exists but maps to a value that is not a `dict` — most critically, `null` (`None` in Python)
+- **Evidence**: Direct code examination of the function's `for` loop at lines 109–111:
 
 ```python
-def validate_percent_complete(value):
-    assert value is None or isinstance(value, (int, float))
+for key_name in METERING_BLOCK_KEY_NAMES:
+    if key_name in response_data:
+        return response_data[key_name]
 ```
 
-Create `src/models.py` with Pydantic models that enforce the response contract at the parsing layer.
+The `if key_name in response_data` check confirms the key exists, but performs zero validation on the value at `response_data[key_name]` before returning it. The function's docstring (line 99) declares the return type as `Dict[str, Any]`, but the implementation does not enforce this contract.
 
-**Phase D — Wire Test Fixtures**: Create `tests/conftest.py` establishing pytest fixtures that provide a configured `APIClient` instance, project ID, and run ID from environment variables. Include conditional skip markers for tests requiring active runs.
+- **This conclusion is definitive because**: The function has exactly one `return` statement (line 111) and one `raise` path (lines 114–118). The `raise` path only fires when no metering key is found at all. When a metering key IS found but maps to `None`, the `return` at line 111 returns `None` unconditionally. There is no type check anywhere between the key-existence check and the return statement.
 
-**Phase E — Implement Endpoint Tests**: Build each test module (`test_runs_metering.py`, `test_runs_metering_current.py`, `test_project.py`) following the Arrange-Act-Assert pattern:
+### 0.2.2 Downstream Impact — Vulnerable Call Sites
+
+Two test functions call `_get_metering_block()` and use the returned value without an `isinstance(metering_data, dict)` guard:
+
+**Vulnerable Call Site 1** — `test_percent_complete_present_in_project_metering` (line 200):
 
 ```python
-def test_percent_complete_present(api_client, test_project_id):
-    response = api_client.get_runs_metering(test_project_id)
-    assert "percent_complete" in response or "percentComplete" in response
+metering_data = _get_metering_block(response)
+found_field = validate_field_presence(metering_data, ...)
 ```
 
-**Phase F — Add Cross-Cutting and Edge Case Coverage**: Implement consistency tests that call all three endpoints for the same project and compare field presence. Add parameterized edge case tests covering boundary values.
+When `metering_data` is `None`, `validate_field_presence()` in `src/validators.py` executes `any(field in data for field in names)`, which raises `TypeError: argument of type 'NoneType' is not iterable`.
 
-**Phase G — Document**: Update `README.md` with complete project documentation. Create `docs/test_plan.md` and `docs/api_contracts.md` to formalize the test strategy and API contracts.
+**Vulnerable Call Site 2** — `test_percent_complete_not_at_top_level` (lines 246–248 and 260–262):
 
-### 0.5.3 User Interface Design
+```python
+metering_data = _get_metering_block(response)
+metering_field_found = any(
+    field_name in metering_data
+    for field_name in PERCENT_COMPLETE_FIELD_NAMES
+)
+```
 
-This feature has no user interface component — it is a backend API test suite. However, the user provided detailed browser DevTools Network Tab inspection guidance that serves as a manual QA verification companion to the automated tests.
+When `metering_data` is `None`, the `in` operator raises the same `TypeError`. When `metering_data` is a string (e.g., `"loading"`), `in` performs substring matching instead of key lookup, producing incorrect boolean results rather than a crash.
 
-Key insights from the user's instructions for documentation purposes:
+### 0.2.3 Contrast with Safe Call Sites
 
-- **Manual Verification Workflow**: Open DevTools → Network tab → Filter by `metering`, `runs`, or `project` → Click request → Response/Preview → Search for `percent_complete` or `percentComplete`
-- **Filter Recommendation**: Use XHR/Fetch filter with Preserve Log enabled to capture API calls across page navigations
-- **Trigger Actions**: Open a project, start/view a code generation run, refresh project dashboard, check run progress/details page
-- **Validation Criteria**: Field present with numeric value (0–100) for active/completed runs, `null` for no-data scenarios, field missing indicates a bug
+Five other test functions in the same file ARE protected because they include an explicit `isinstance` guard immediately after calling `_get_metering_block()`:
 
-These manual procedures will be documented in the project `README.md` and `docs/test_plan.md` as supplementary QA verification steps alongside the automated test suite.
+- `test_percent_complete_type_in_project` — line 296: `assert isinstance(metering_data, dict)`
+- `test_percent_complete_range_in_project` — line 334: `assert isinstance(metering_data, dict)`
+- `test_percent_complete_null_acceptance_in_project` — has a similar guard after the call
+- `test_metering_block_structure` — validates type before accessing keys
+- `test_metering_block_additional_fields` — validates type before accessing keys
 
-## 0.6 Scope Boundaries
+This inconsistency confirms that the type guard was intended but was omitted from the two vulnerable call sites. The correct fix is to centralize the guard inside `_get_metering_block()` itself so all callers are automatically protected.
 
-### 0.6.1 Exhaustively In Scope
+### 0.2.4 Root Cause Classification
 
-**All Feature Source Files**:
-- `src/**/*.py` — All source modules including API client, configuration, validators, and response models
-- `src/__init__.py` — Package initializer
-- `src/config.py` — Environment-based configuration management
-- `src/api_client.py` — HTTP client for three target endpoints
-- `src/validators.py` — Field validation logic for `percent_complete`
-- `src/models.py` — Pydantic response models
+| Attribute | Value |
+|-----------|-------|
+| Category | Missing input validation |
+| Defect type | Type-safety gap in test helper |
+| Trigger condition | `GET /project` returns `{"metering": null}` |
+| Failure mode | Unhandled `TypeError` / `AttributeError` |
+| Crash location | Caller-side — lines 202, 248, 262 |
+| Defect origin | `_get_metering_block()` — line 111 |
+| Number of affected tests | 2 out of 7 `GET /project` tests |
+| Severity | Medium — confuses debugging, masks real API defects |
 
-**All Feature Test Files**:
-- `tests/**/*.py` — All test modules covering endpoint-specific, cross-API, and edge case scenarios
-- `tests/__init__.py` — Test package initializer
-- `tests/conftest.py` — Shared fixtures (API client, project IDs, run IDs, skip markers)
-- `tests/test_runs_metering.py` — `GET /runs/metering` validation suite
-- `tests/test_runs_metering_current.py` — `GET /runs/metering/current` validation suite
-- `tests/test_project.py` — `GET /project` inline metering validation suite
-- `tests/test_cross_api_consistency.py` — Cross-endpoint consistency checks
-- `tests/test_edge_cases.py` — Boundary value and negative scenario tests
+## 0.3 Diagnostic Execution
 
-**Configuration Files**:
-- `requirements.txt` — Full dependency manifest with pinned versions
-- `pytest.ini` — Test framework configuration, custom markers, timeout settings
-- `.env.example` — Template for required environment variables (`BASE_URL`, `API_TOKEN`, `TEST_PROJECT_ID`, `TEST_RUN_ID`)
-- `config/settings.yaml` — Endpoint paths, field name variants, validation parameters
+### 0.3.1 Code Examination Results
 
-**Documentation**:
-- `README.md` — Project documentation with setup, execution, and manual QA reference (modification of existing file)
-- `docs/test_plan.md` — Formal test plan mapping requirements to test cases
-- `docs/api_contracts.md` — API response contract specifications with expected JSON structures
+- **File analyzed**: `tests/test_project.py`
+- **Problematic code block**: Lines 109–111 (`_get_metering_block` return path)
+- **Specific failure point**: Line 111, the `return response_data[key_name]` statement
+- **Execution flow leading to bug**:
+  - Step 1: A `GET /project` test function calls `api_client.get_project(test_project_id)`, receiving a JSON response parsed as a Python `dict`
+  - Step 2: The test function calls `_get_metering_block(response)` to extract the nested metering sub-object
+  - Step 3: `_get_metering_block` iterates over `METERING_BLOCK_KEY_NAMES` (`["metering", "meteringData", "metering_data"]`) at line 109
+  - Step 4: The key `"metering"` is found in `response_data` (line 110 evaluates to `True`)
+  - Step 5: Line 111 returns `response_data["metering"]` which is `None` — no type check occurs
+  - Step 6: The caller receives `None` where it expects a `dict`
+  - Step 7: The caller passes `None` to `validate_field_presence()` or uses `None` directly in an `any(field_name in None ...)` expression
+  - Step 8: Python raises `TypeError: argument of type 'NoneType' is not iterable`
 
-**Target API Endpoints Under Test**:
-- `GET /runs/metering?projectId={id}` — Field presence, type, range for historical runs
-- `GET /runs/metering/current` — Field presence, type, range for active runs
-- `GET /project?id={id}` — Field presence within nested metering block
+### 0.3.2 Repository File Analysis Findings
 
-### 0.6.2 Explicitly Out of Scope
+| Tool Used | Command/Action Executed | Finding | File:Line |
+|-----------|------------------------|---------|-----------|
+| read_file | `tests/test_project.py` lines 85–118 | `_get_metering_block()` has no type validation on return value | `tests/test_project.py:111` |
+| read_file | `tests/test_project.py` lines 185–212 | `test_percent_complete_present_in_project_metering` passes raw return to `validate_field_presence` without `isinstance` guard | `tests/test_project.py:200-202` |
+| read_file | `tests/test_project.py` lines 216–270 | `test_percent_complete_not_at_top_level` uses `in` operator on raw return at two sites without `isinstance` guard | `tests/test_project.py:246-248, 260-262` |
+| read_file | `tests/test_project.py` lines 279–299 | `test_percent_complete_type_in_project` has `isinstance` guard at line 296 — SAFE | `tests/test_project.py:296` |
+| read_file | `tests/test_project.py` lines 318–346 | `test_percent_complete_range_in_project` has `isinstance` guard at line 334 — SAFE | `tests/test_project.py:334` |
+| read_file | `src/validators.py` lines 70–130 | `validate_field_presence` uses `any(field in data ...)` which crashes on `None` input | `src/validators.py:~155` |
+| bash | `python3 -c "from tests.test_project import _get_metering_block; r = _get_metering_block({'metering': None}); print(type(r))"` | Returns `NoneType` — confirms no type guard | `tests/test_project.py:111` |
+| bash | `python3 -c "from src.validators import validate_field_presence, PERCENT_COMPLETE_FIELD_NAMES; validate_field_presence(None, PERCENT_COMPLETE_FIELD_NAMES, 'test')"` | Raises `TypeError: argument of type 'NoneType' is not iterable` | `src/validators.py` |
+| bash | `python3 -c "from tests.test_project import _get_metering_block; r = _get_metering_block({'metering': 'loading'}); print(type(r), repr(r))"` | Returns `str 'loading'` — non-dict accepted silently | `tests/test_project.py:111` |
+| bash | `cd /tmp/blitzy/6thaprilone/main_0d6e40 && python3 -m pytest -v --tb=short --timeout=30 --no-header` | 102 passed, 35 skipped — all unit tests pass, integration tests skip due to missing env vars | Full suite |
+| grep (via bash) | `grep -n "isinstance.*metering_data.*dict" tests/test_project.py` | Found guards at lines 296, 334, and in later tests — confirms inconsistent protection pattern | `tests/test_project.py:296,334` |
+| grep (via bash) | `grep -n "_get_metering_block" tests/test_project.py` | 7 call sites total: lines 200, 246, 260, 294, 332, 379, and others | `tests/test_project.py` |
 
-- **Modifying the Blitzy Platform APIs themselves** — This project only tests the responses; it does not implement the `percent_complete` field in the backend services
-- **The `archie-job-reverse-document-generator` batch job** — The headless Cloud Run Job and its LangGraph pipeline are not modified or tested by this project
-- **Pub/Sub notification payloads** — While `percent_complete` data originates from Pub/Sub `IN_PROGRESS` notifications, testing the message format or publishing logic is outside scope
-- **Database schema changes** — No database models, migrations, or storage modifications are included
-- **Authentication and authorization implementation** — This project consumes existing auth mechanisms as a client; it does not implement, modify, or test the auth system itself
-- **Performance testing** — Load testing, stress testing, or response time benchmarking of the target APIs is not included
-- **UI or frontend testing** — No browser automation, Selenium, Playwright, or frontend component testing; the DevTools Network Tab guidance is for manual QA reference only
-- **Other API endpoints** — Only the three specified endpoints are tested; no other Blitzy Platform APIs are in scope
-- **CI/CD pipeline creation** — While tests are designed to be CI-compatible, creating GitHub Actions workflows or deployment pipelines is not included in this initial scope
-- **Refactoring unrelated platform code** — No modifications to existing platform services, models, or infrastructure outside the three target API responses
+### 0.3.3 Fix Verification Analysis
 
-## 0.7 Rules for Feature Addition
+- **Steps followed to reproduce bug**:
+  - Imported `_get_metering_block` from `tests.test_project` in an interactive Python session
+  - Called `_get_metering_block({"metering": None})` — returned `None` (confirmed bug)
+  - Called `_get_metering_block({"metering": "loading"})` — returned `"loading"` (confirmed bug)
+  - Passed `None` result to `validate_field_presence()` — `TypeError` raised (confirmed crash)
+  - Passed `None` result to `any(field in None for field in ...)` — `TypeError` raised (confirmed crash)
 
-### 0.7.1 Feature-Specific Rules and Requirements
+- **Confirmation tests to ensure the fix works**:
+  - After applying the fix, `_get_metering_block({"metering": None})` must raise `AssertionError` with a message describing that the metering block is not a `dict`
+  - After applying the fix, `_get_metering_block({"metering": "loading"})` must raise `AssertionError`
+  - After applying the fix, `_get_metering_block({"metering": {"percent_complete": 50.0}})` must still return the `dict` successfully (no regression)
+  - The full test suite (`python3 -m pytest -v --tb=short --timeout=30`) must continue showing 102 passed, 35 skipped
 
-The following rules govern the implementation of this API test suite, derived from the user's explicit instructions and implicit platform conventions:
+- **Boundary conditions and edge cases covered**:
+  - `None` value at metering key (primary trigger)
+  - String value at metering key
+  - List value at metering key (e.g., `{"metering": [1, 2]}`)
+  - Boolean value at metering key (e.g., `{"metering": True}`)
+  - Integer value at metering key (e.g., `{"metering": 42}`)
+  - Empty dict at metering key (valid — should return `{}`)
+  - Normal dict at metering key (valid — should return the dict)
 
-**Field Naming Convention Rule**: Tests MUST check for both `percent_complete` (snake_case) and `percentComplete` (camelCase) field names. The test validation logic must accept either convention as valid, since different API endpoints or serialization layers may use different naming. If one endpoint uses snake_case and another uses camelCase, this is NOT a bug — both are acceptable. However, if the field is completely absent under both names, that IS a bug.
+- **Verification confidence level**: **95%** — The bug is deterministically reproducible and the fix is a straightforward type assertion. The 5% uncertainty accounts for potential edge cases in integration test scenarios where the API might return entirely unexpected structures not covered by the current test data.
 
-**Value Constraint Rules**:
-- A numeric value between `0.0` and `100.0` inclusive is VALID
-- A `null` value is VALID (represents "not applicable" or "no data" scenarios)
-- A value greater than `100.0` is INVALID — test must fail
-- A value less than `0.0` is INVALID — test must fail
-- A non-numeric type (string, boolean, object, array) is INVALID — test must fail
-- An integer value within range (e.g., `50`) is VALID — the field accepts both int and float
+## 0.4 Bug Fix Specification
 
-**Test Isolation Rule**: Each test function must be independently executable without depending on the execution order of other tests. Shared state must flow exclusively through pytest fixtures, not module-level globals or side effects.
+### 0.4.1 The Definitive Fix
 
-**Environment Configuration Rule**: All environment-specific values (base URLs, tokens, project IDs) MUST be read from environment variables or `.env` files — never hardcoded in test files or source modules. Tests must fail gracefully with descriptive skip messages when required configuration is missing.
+- **File to modify**: `tests/test_project.py`
+- **Current implementation at lines 109–111**:
 
-**Assertion Specificity Rule**: Every assertion must include a descriptive failure message that identifies which API endpoint failed, what field was being validated, and what the actual versus expected value was. Generic assertions like `assert True` are prohibited.
+```python
+for key_name in METERING_BLOCK_KEY_NAMES:
+    if key_name in response_data:
+        return response_data[key_name]
+```
 
-**Code Generation Run Context Rule**: The `percent_complete` field is specifically for code generation project runs. Tests must ensure they are operating against projects and runs that are code generation contexts, not other platform operations that may share similar API structures.
+- **Required change at lines 109–111** — replace the 3-line block with a 9-line block that adds an `isinstance` type guard before returning the value:
 
-**Cross-API Consistency Rule**: When testing the same project/run across multiple endpoints, the `percent_complete` value should be logically consistent — a completed run should not show `percent_complete < 100` in one endpoint and `100` in another (accounting for timing differences in eventual consistency).
+```python
+for key_name in METERING_BLOCK_KEY_NAMES:
+    if key_name in response_data:
+        value = response_data[key_name]
+        assert isinstance(value, dict), (
+            f"[{_ENDPOINT}] metering block under key "
+            f"'{key_name}' must be a dict, "
+            f"got {type(value).__name__}: {value!r}"
+        )
+        return value
+```
+
+- **This fixes the root cause by**: Intercepting non-dict values at the extraction point before they propagate to callers. When the API returns `{"metering": null}`, the function now raises a descriptive `AssertionError` stating that the metering block under key `'metering'` must be a `dict` but got `NoneType: None`, instead of allowing `None` to flow through and cause a confusing `TypeError` at a downstream call site. The assertion message follows the existing convention used throughout the file: `[GET /project]` prefix, field identification, and actual-vs-expected value reporting.
+
+### 0.4.2 Change Instructions
+
+- **MODIFY** `tests/test_project.py` lines 109–111:
+  - **FROM** (3 lines):
+    ```python
+        for key_name in METERING_BLOCK_KEY_NAMES:
+            if key_name in response_data:
+                return response_data[key_name]
+    ```
+  - **TO** (9 lines):
+    ```python
+        for key_name in METERING_BLOCK_KEY_NAMES:
+            if key_name in response_data:
+                # Guard: ensure the value under the metering key is a dict.
+                # Without this check, None or non-dict values propagate to
+                # callers, causing TypeError/AttributeError instead of
+                # descriptive AssertionError messages.
+                value = response_data[key_name]
+                assert isinstance(value, dict), (
+                    f"[{_ENDPOINT}] metering block under key "
+                    f"'{key_name}' must be a dict, "
+                    f"got {type(value).__name__}: {value!r}"
+                )
+                return value
+    ```
+
+- **No other lines in this file require modification**. The existing `isinstance` guards in the 5 safe callers (lines 296, 334, etc.) become redundant but are harmless and should be left in place as defense-in-depth.
+- **No other files require modification**. The bug is entirely contained within `_get_metering_block()` in `tests/test_project.py`.
+
+### 0.4.3 Fix Validation
+
+- **Test command to verify fix**:
+  ```
+  cd /tmp/blitzy/6thaprilone/main_0d6e40 && CI=true python3 -m pytest -v --tb=short --timeout=30 --no-header
+  ```
+- **Expected output after fix**: `102 passed, 35 skipped` — identical to the current baseline (the fix only changes the error path, not the success path, so no existing passing test is affected)
+- **Confirmation method**:
+  - Run the interactive reproduction scenario post-fix:
+    ```python
+    from tests.test_project import _get_metering_block
+    try:
+        _get_metering_block({"metering": None})
+    except AssertionError as e:
+        print("PASS:", e)
+    ```
+  - Expected: `AssertionError` with message containing `must be a dict, got NoneType`
+  - Run with string value:
+    ```python
+    try:
+        _get_metering_block({"metering": "loading"})
+    except AssertionError as e:
+        print("PASS:", e)
+    ```
+  - Expected: `AssertionError` with message containing `must be a dict, got str`
+  - Run with valid dict (regression check):
+    ```python
+    result = _get_metering_block({"metering": {"percent_complete": 50.0}})
+    assert result == {"percent_complete": 50.0}
+    print("PASS: valid dict returned correctly")
+    ```
+  - Expected: Returns the dict without error
+
+### 0.4.4 Design Rationale
+
+The fix is placed inside `_get_metering_block()` rather than at each call site for the following reasons:
+
+- **Centralization**: All 7 callers are protected by a single code change, eliminating the need to patch each test function individually
+- **Contract enforcement**: The function's docstring declares `Returns Dict[str, Any]` — the assertion makes the implementation honor this contract
+- **Consistency**: The assertion message follows the `[GET /project]` prefix convention already used in every other assertion in the file (per the module docstring at line 35)
+- **Minimality**: The fix adds 6 net new lines (9 replacement lines minus 3 original lines), all within a single function, with zero changes to any other file
+
+## 0.5 Scope Boundaries
+
+### 0.5.1 Changes Required (Exhaustive List)
+
+| Action | File Path | Lines | Specific Change |
+|--------|-----------|-------|-----------------|
+| MODIFIED | `tests/test_project.py` | 109–111 | Replace 3-line unconditional return with 9-line guarded return including `isinstance(value, dict)` assertion |
+
+**Total files affected**: 1
+**Total lines changed**: 3 lines removed, 9 lines added (net +6 lines)
+**No files are CREATED or DELETED.**
+
+### 0.5.2 Explicitly Excluded
+
+The following files and components are explicitly OUT OF SCOPE for this fix:
+
+- **Do not modify**: `src/validators.py` — The `validate_field_presence()` function is not at fault; it correctly assumes dict-like input per its contract. The bug is in the caller that passes non-dict values.
+- **Do not modify**: `src/api_client.py` — The API client correctly returns whatever the API sends; the test infrastructure must handle unexpected shapes.
+- **Do not modify**: `src/models.py` — The Pydantic models are declarative validation for well-formed data; they are not involved in the test helper's extraction logic.
+- **Do not modify**: `src/config.py` — Configuration loading has no bearing on this bug.
+- **Do not modify**: `tests/conftest.py` — Shared fixtures are not involved in the metering block extraction.
+- **Do not modify**: `tests/test_runs_metering.py` — The `_extract_metering_records()` helper in this file handles its own envelope shapes and is not affected.
+- **Do not modify**: `tests/test_runs_metering_current.py` — This endpoint's response is a flat object; no nested extraction is involved.
+- **Do not modify**: `tests/test_cross_api_consistency.py` — Cross-API tests have their own extraction helpers with appropriate guards.
+- **Do not modify**: `tests/test_edge_cases.py` — Unit tests are self-contained with mock data; the bug is only in the integration test helper.
+- **Do not modify**: `config/settings.yaml` — Configuration values are unrelated.
+- **Do not modify**: `pytest.ini` — Test runner configuration is unrelated.
+- **Do not modify**: `requirements.txt` — No dependency changes are needed.
+- **Do not remove**: Existing `isinstance(metering_data, dict)` guards in the 5 safe test functions (lines 296, 334, etc.) — These become redundant after the fix but should be retained as defense-in-depth.
+- **Do not add**: New test files, new source modules, or new configuration entries — The fix is a minimal correction to existing code.
+- **Do not refactor**: The overall structure of `_get_metering_block()` or the `METERING_BLOCK_KEY_NAMES` iteration pattern — These are sound and should not be restructured as part of a bug fix.
+
+## 0.6 Verification Protocol
+
+### 0.6.1 Bug Elimination Confirmation
+
+- **Execute the full test suite**:
+  ```
+  cd /tmp/blitzy/6thaprilone/main_0d6e40 && CI=true python3 -m pytest -v --tb=short --timeout=30 --no-header
+  ```
+- **Verify output matches**: `102 passed, 35 skipped` — identical to the pre-fix baseline. No test that currently passes should fail after the fix. No test that currently skips should change status.
+- **Confirm the error path now produces an `AssertionError`**: Execute the following interactive reproduction after applying the fix:
+  ```
+  cd /tmp/blitzy/6thaprilone/main_0d6e40 && python3 -c "
+  from tests.test_project import _get_metering_block
+  # Test 1: None value should raise AssertionError
+  try:
+      _get_metering_block({'metering': None})
+      print('FAIL: No exception raised for None')
+  except AssertionError as e:
+      assert 'must be a dict' in str(e)
+      print('PASS: None value raises AssertionError')
+  except TypeError:
+      print('FAIL: TypeError still raised — fix not applied')
+  # Test 2: String value should raise AssertionError
+  try:
+      _get_metering_block({'metering': 'loading'})
+      print('FAIL: No exception raised for string')
+  except AssertionError as e:
+      assert 'must be a dict' in str(e)
+      print('PASS: String value raises AssertionError')
+  # Test 3: Valid dict should still work
+  result = _get_metering_block({'metering': {'percent_complete': 50.0}})
+  assert result == {'percent_complete': 50.0}
+  print('PASS: Valid dict returned correctly')
+  "
+  ```
+- **Expected output**: Three `PASS` lines confirming all three scenarios behave correctly.
+- **Validate no unhandled exceptions remain**: Run a broader edge case sweep after applying the fix:
+  ```
+  cd /tmp/blitzy/6thaprilone/main_0d6e40 && python3 -c "
+  from tests.test_project import _get_metering_block
+  bad_values = [None, 'loading', 42, True, False, [1,2], 3.14]
+  for val in bad_values:
+      try:
+          _get_metering_block({'metering': val})
+          print(f'FAIL: {type(val).__name__} not caught')
+      except AssertionError:
+          print(f'PASS: {type(val).__name__} correctly rejected')
+  # Valid cases
+  for val in [{}, {'percent_complete': 0.0}, {'percentComplete': 100.0}]:
+      result = _get_metering_block({'metering': val})
+      assert isinstance(result, dict)
+      print(f'PASS: valid dict {val} accepted')
+  "
+  ```
+
+### 0.6.2 Regression Check
+
+- **Run the existing test suite** (same command as above) to confirm all 102 unit tests continue passing. The 35 integration tests will continue to skip due to missing environment variables — this is expected and correct.
+- **Verify unchanged behavior in the following features**:
+  - `tests/test_runs_metering.py` — All 7 tests must maintain their current pass/skip status
+  - `tests/test_runs_metering_current.py` — All 7 tests must maintain their current pass/skip status
+  - `tests/test_cross_api_consistency.py` — All 7 tests must maintain their current pass/skip status
+  - `tests/test_edge_cases.py` — All 109 tests must continue passing (these are pure unit tests unaffected by the change)
+- **Confirm test execution time**: The fix adds a single `isinstance` check per invocation of `_get_metering_block()` — execution time delta should be imperceptible (sub-microsecond). Total suite time should remain under 1 second.
+- **Verify no import or syntax errors**: Run a static compile check on the modified file:
+  ```
+  python3 -m py_compile tests/test_project.py && echo "Syntax OK"
+  ```
+
+## 0.7 Rules
+
+### 0.7.1 Coding and Development Standards
+
+The following rules are derived from the existing codebase conventions observed across all 21 files in the repository and must be strictly followed when implementing the fix:
+
+- **Assertion message convention**: Every assertion in the test suite includes a descriptive message formatted as `f"[{_ENDPOINT}] <description> ... got {type(value).__name__}: {value!r}"`. The fix must follow this exact pattern, using the module-level `_ENDPOINT` constant (`"GET /project"`) as the prefix.
+- **Docstring convention**: The codebase uses NumPy-style docstrings with `Parameters`, `Returns`, and `Raises` sections. If the docstring for `_get_metering_block()` is updated, it must follow this format. The existing `Raises` section at lines 102–107 already documents `AssertionError` for missing keys; the new type-check assertion should be noted there.
+- **Type hint convention**: All functions in the codebase use PEP 484 type annotations. The return type of `_get_metering_block()` is already declared as `Dict[str, Any]` — the fix enforces this contract without changing the signature.
+- **Import convention**: No new imports are required for this fix. The `isinstance` built-in is used extensively throughout the existing codebase.
+- **Comment convention**: Inline comments in the codebase explain the "why" behind non-obvious logic. The fix should include a brief comment explaining why the type guard exists (to prevent `TypeError`/`AttributeError` at downstream call sites).
+
+### 0.7.2 Bug Fix Discipline
+
+- Make the exact specified change only — modify lines 109–111 of `tests/test_project.py` to add the `isinstance` guard
+- Zero modifications outside the bug fix — no refactoring, no feature additions, no test restructuring
+- Preserve all existing test behavior — 102 passed, 35 skipped must remain the outcome
+- Do not alter the public API of `_get_metering_block()` — it must still accept `Dict[str, Any]` and return `Dict[str, Any]`
+- Do not remove the redundant `isinstance` guards in the 5 safe caller functions — defense-in-depth is an explicit design choice in this codebase
+
+### 0.7.3 Version Compatibility
+
+- **Python**: The fix uses `isinstance()` and f-strings, both available since Python 3.6. The project targets Python 3.10+ (tested on 3.12.3). No compatibility concerns.
+- **pytest**: The fix uses `assert` statements (not `pytest.raises`), consistent with the existing codebase pattern. Compatible with pytest ≥ 8.3.0 as specified in `requirements.txt`.
+- **No new dependencies**: The fix requires no new packages, no version bumps, and no changes to `requirements.txt`.
+
+### 0.7.4 Testing Standards
+
+- Extensive testing must confirm the fix prevents regressions across all 137 test cases (102 unit + 35 integration)
+- The fix must be validated against both the `None` trigger condition and at least 5 additional non-dict types (string, int, float, bool, list) to ensure comprehensive coverage
+- All verification commands must use non-interactive flags (`--timeout=30`, `--no-header`, `CI=true`) to prevent hanging
 
 ## 0.8 References
 
-### 0.8.1 Codebase Files and Folders Searched
+### 0.8.1 Repository Files and Folders Searched
 
-The following files and folders were systematically searched across the repository to derive the conclusions presented in this Agent Action Plan:
+The following files and folders were exhaustively examined to derive the conclusions in this Agent Action Plan:
 
-| Path | Type | Outcome |
-|---|---|---|
-| `` (repository root) | Folder | Retrieved via `get_source_folder_contents` — contains only `README.md` (UNCHANGED status), confirming greenfield project state |
-| `README.md` | File | Retrieved via `read_file` — contains only `# 6thaprilone` placeholder heading, no project documentation |
-| `/` (filesystem root) | Search | Searched via `find / -name ".blitzyignore"` — no `.blitzyignore` files found anywhere in the filesystem |
-| `/tmp/environments_files/` | Directory | Checked for user-provided environment files — directory does not exist |
+**Source Code (`src/`)**
 
-### 0.8.2 Technical Specification Sections Retrieved
+| File Path | Purpose | Relevance to Bug |
+|-----------|---------|-------------------|
+| `src/config.py` | Settings management with Pydantic BaseModel | Reviewed — not involved in the bug |
+| `src/api_client.py` | HTTP client with retry logic for 3 endpoints | Reviewed — returns raw API response; not at fault |
+| `src/validators.py` | Imperative validation functions for `percent_complete` | Reviewed — `validate_field_presence()` is a downstream crash site but not the root cause |
+| `src/models.py` | Pydantic v2 declarative models for response validation | Reviewed — not involved in the bug |
 
-The following tech spec sections were retrieved to establish comprehensive system context:
+**Test Code (`tests/`)**
 
-| Section | Key Information Extracted |
-|---|---|
-| 1.1 Executive Summary | System identity (`archie-job-reverse-document-generator`), Cloud Run Job architecture, Pub/Sub trigger model, AI-powered document generation purpose |
-| 1.2 System Overview | 8-node LangGraph pipeline, two-agent architecture (Search + Author), Claude Opus 4 as primary LLM, 350K token context window |
-| 1.3 Scope | 9 document sections (indices 0–8), integration with 12+ external services, explicit out-of-scope boundaries (no UI, no auth, no code generation) |
-| 2.1 Feature Catalog | 17 features across 5 categories, F-007 (Real-Time Progress Streaming with `current_index`, `total_steps`), F-010 (Metering Estimation with `estimated_hours_saved`, `estimated_lines_generated`) — establishing the data origin for `percent_complete` |
-| 3.2 Frameworks and Libraries | Core: LangGraph, LangChain Core, Pydantic (all via shared package), Supporting: thefuzz, Black, isort |
-| 3.3 Open Source Dependencies | Single-dependency strategy: `blitzy-platform-shared==0.0.731` in requirements.txt, all others transitive |
-| 6.1 Core Services Architecture | Single monolithic batch-processing service, no HTTP endpoints, consumer-only integration posture — confirming the 3 target APIs belong to upstream platform |
-| 6.2 Database Design | No traditional RDBMS, four-tier storage (Neo4j, in-memory, filesystem, TypedDict), GCS sole persistent store — no database modifications needed for this feature |
-| 6.3 Integration Architecture | Consumer-only posture, 12+ external service integrations, Pub/Sub notification payloads containing organizational context and metering metrics |
-| 6.6 Testing Strategy | Zero automated tests exist, no test framework, manual utilities only (`done.test.py`, `retry.test.py`), recommended pytest approach with aggressive mocking |
+| File Path | Purpose | Relevance to Bug |
+|-----------|---------|-------------------|
+| `tests/conftest.py` | Shared pytest fixtures (session + function scope) | Reviewed — fixtures not involved |
+| `tests/test_project.py` | Tests for `GET /project` endpoint — **contains the bug** | **Primary file** — `_get_metering_block()` at lines 85–118 |
+| `tests/test_runs_metering.py` | Tests for `GET /runs/metering` endpoint | Reviewed — has its own `_extract_metering_records()` helper, not affected |
+| `tests/test_runs_metering_current.py` | Tests for `GET /runs/metering/current` endpoint | Reviewed — flat response structure, no nested extraction |
+| `tests/test_cross_api_consistency.py` | Cross-API consistency tests (R-004) | Reviewed — has its own extraction helpers with appropriate guards |
+| `tests/test_edge_cases.py` | 109 unit tests for edge cases (R-005) | Reviewed — pure unit tests with mock data, not affected |
 
-### 0.8.3 Web Research Conducted
+**Configuration and Documentation**
 
-| Research Topic | Purpose |
-|---|---|
-| pytest API response field validation best practices | Confirmed pytest + requests as standard approach for Python API testing with fixtures and parameterized tests |
-| JSON schema validation for API testing | Identified `jsonschema` library for structural response validation |
-| API test project structure patterns | Established standard directory layout conventions for test projects |
-| Edge case testing strategies for numeric fields | Confirmed boundary value analysis and negative testing as standard patterns |
+| File Path | Purpose | Relevance to Bug |
+|-----------|---------|-------------------|
+| `config/settings.yaml` | Endpoint paths, field names, validation constraints | Reviewed — configuration values confirmed correct |
+| `pytest.ini` | Test runner configuration with custom markers | Reviewed — marker definitions confirmed correct |
+| `requirements.txt` | PyPI dependency manifest (8 packages) | Reviewed — dependency versions confirmed compatible |
+| `.env.example` | Environment variable template | Reviewed — integration test skip behavior confirmed |
+| `README.md` | Project documentation and QA procedures | Reviewed — Python 3.10+ requirement confirmed |
+| `docs/test_plan.md` | Detailed test plan covering 5 requirements | Reviewed — requirement mapping confirmed |
+| `docs/api_reference.md` | API endpoint reference documentation | Reviewed — response structure expectations confirmed |
 
-### 0.8.4 Attachments and External Resources
+**Root-Level and Build Files**
 
-- **User Attachments**: No attachments were provided for this project (0 environments attached)
-- **Figma URLs**: No Figma designs were referenced or provided
-- **Environment Files**: No environment files were provided in `/tmp/environments_files/`
-- **Setup Instructions**: No user-provided setup instructions were specified
-- **Implementation Rules**: No user-specified implementation rules were provided
+| File Path | Purpose |
+|-----------|---------|
+| `.env.example` | Environment variable template |
+| `blitzy/` | Blitzy platform metadata directory |
+
+### 0.8.2 Technical Specification Sections Consulted
+
+| Section | Key Insight |
+|---------|-------------|
+| 1.1 Executive Summary | Confirmed 137 total test cases (102 unit + 35 integration), Python 3.10+ target, dual-layer validation architecture |
+| 3.1 Technology Stack Overview | Confirmed 8 PyPI dependencies, minimal footprint design, configuration-driven flexibility |
+| 6.6 Testing Strategy | Confirmed comprehensive testing strategy with unit testing (109 tests in `test_edge_cases.py`), integration testing (35 tests across 4 modules), edge case coverage matrix |
+
+### 0.8.3 Commands Executed for Diagnosis
+
+| Command | Purpose | Key Result |
+|---------|---------|------------|
+| `find / -maxdepth 4 -name ".blitzyignore"` | Search for ignore files | None found |
+| `pip install --break-system-packages -r requirements.txt` | Install project dependencies | All 8 packages installed successfully |
+| `python3 -m pytest -v --tb=short --timeout=30 --no-header` | Run full test suite | 102 passed, 35 skipped, 0 failed |
+| `python3 -c "from tests.test_project import _get_metering_block; ..."` | Reproduce bug with `None` value | Confirmed: returns `None`, causes `TypeError` downstream |
+| `python3 -c "from tests.test_project import _get_metering_block; ..."` | Reproduce bug with string value | Confirmed: returns `"loading"`, causes `AttributeError` downstream |
+| `grep -n "isinstance.*metering_data.*dict" tests/test_project.py` | Identify existing type guards | Found guards at lines 296, 334 — confirms inconsistent protection |
+| `grep -n "_get_metering_block" tests/test_project.py` | Count all call sites | 7 call sites identified — 2 vulnerable, 5 safe |
+
+### 0.8.4 Attachments
+
+No attachments were provided for this project. No Figma URLs were specified.
 
